@@ -10,23 +10,25 @@ pub const none = @import("none.zig");
 pub const token = @import("token.zig");
 pub const utils = @import("utils.zig");
 
-pub const SigningMethodES256 = JWT(ecdsa.ES256, ecdsa.ecdsa.EcdsaP256Sha256.SecretKey, ecdsa.ecdsa.EcdsaP256Sha256.PublicKey);
-pub const SigningMethodES384 = JWT(ecdsa.ES384, ecdsa.ecdsa.EcdsaP384Sha384.SecretKey, ecdsa.ecdsa.EcdsaP384Sha384.PublicKey);
+pub const SigningMethodES256 = JWT(ecdsa.SigningES256, ecdsa.ecdsa.EcdsaP256Sha256.SecretKey, ecdsa.ecdsa.EcdsaP256Sha256.PublicKey);
+pub const SigningMethodES384 = JWT(ecdsa.SigningES384, ecdsa.ecdsa.EcdsaP384Sha384.SecretKey, ecdsa.ecdsa.EcdsaP384Sha384.PublicKey);
 // pub const SigningMethodES512 = JWT(ecdsa.ES512, ecdsa.ecdsa.SecretKey, ecdsa.ecdsa.PublicKey);
 
-pub const SigningMethodEdDSA = JWT(eddsa.EdDSA, eddsa.Ed25519.SecretKey, eddsa.Ed25519.PublicKey);
+pub const SigningMethodEdDSA = JWT(eddsa.SigningEdDSA, eddsa.Ed25519.SecretKey, eddsa.Ed25519.PublicKey);
+pub const SigningMethodED25519 = JWT(eddsa.SigningED25519, eddsa.Ed25519.SecretKey, eddsa.Ed25519.PublicKey);
 
-pub const SigningMethodHS256 = JWT(hmac.HS256, []const u8, []const u8);
-pub const SigningMethodHS384 = JWT(hmac.HS384, []const u8, []const u8);
-pub const SigningMethodHS512 = JWT(hmac.HS512, []const u8, []const u8);
+pub const SigningMethodHS256 = JWT(hmac.SigningHS256, []const u8, []const u8);
+pub const SigningMethodHS384 = JWT(hmac.SigningHS384, []const u8, []const u8);
+pub const SigningMethodHS512 = JWT(hmac.SigningHS512, []const u8, []const u8);
 
-pub const SigningMethodNone = JWT(none.None, []const u8, []const u8);
+pub const SigningMethodNone = JWT(none.SigningNone, []const u8, []const u8);
 
 pub const Error = error {
     JWTVerifyFail,
     JWTSignatureInvalid,
     JWTSigningMethodNotExists,
     JWTTypeInvalid,
+    JWTAlgoInvalid
 };
 
 pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicKeyType: type) type {
@@ -68,6 +70,9 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
             const header = try t.getHeader();
             if (!eq(header.typ, "JWT")) {
                 return Error.JWTTypeInvalid;
+            }
+            if (!eq(header.alg, self.signer.alg())) {
+                return Error.JWTAlgoInvalid;
             }
 
             const token_sign = t.getSignature();
@@ -200,7 +205,7 @@ test "parse JWTSignatureInvalid" {
     var need_true: bool = false;
     _ = p.parse(token_string, kp.public_key) catch |err| {
         need_true = true;
-        try testing.expectEqual(Error.JWTSignatureInvalid, err);
+        try testing.expectEqual(Error.JWTAlgoInvalid, err);
     };
     try testing.expectEqual(true, need_true);
 
@@ -506,13 +511,13 @@ test "SigningMethodEdDSA Check" {
         .foo = "bar",
     };
 
-    const s = SigningMethodEdDSA.init(alloc);
+    const s = SigningMethodED25519.init(alloc);
     const token_string = try s.make(claims, secret_key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
-    const p = SigningMethodEdDSA.init(alloc);
+    const p = SigningMethodED25519.init(alloc);
     var parsed = try p.parse(token_str, public_key);
 
     const claims2 = try parsed.getClaims();
@@ -533,7 +538,7 @@ test "SigningMethodEdDSA Check fail" {
 
     const public_key = try eddsa.Ed25519.PublicKey.fromBytes(pub_key_buf);
 
-    const p = SigningMethodEdDSA.init(alloc);
+    const p = SigningMethodED25519.init(alloc);
 
     var need_true: bool = false;
     _ = p.parse(token_str, public_key) catch |err| {

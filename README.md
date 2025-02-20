@@ -85,6 +85,7 @@ The JWT library have signing methods:
  - `ES384`: jwt.SigningMethodES384
  
  - `EdDSA`: jwt.SigningMethodEdDSA
+ - `ED25519`: jwt.SigningMethodED25519
 
  - `HS256`: jwt.SigningMethodHS256
  - `HS384`: jwt.SigningMethodHS384

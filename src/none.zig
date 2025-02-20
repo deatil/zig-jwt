@@ -2,9 +2,9 @@ const std = @import("std");
 const fmt = std.fmt;
 const testing = std.testing;
 
-pub const None = SigningNone("none");
+pub const SigningNone = SignNone("none");
 
-pub fn SigningNone(comptime name: []const u8) type {
+pub fn SignNone(comptime name: []const u8) type {
     return struct {
         const Self = @This();
 
@@ -44,8 +44,8 @@ pub fn SigningNone(comptime name: []const u8) type {
     };
 }
 
-test "None" {
-    const h = None.init();
+test "SigningNone" {
+    const h = SigningNone.init();
 
     const alg = h.alg();
     const signLength = h.signLength();

@@ -4,11 +4,11 @@ const testing = std.testing;
 
 pub const ecdsa = std.crypto.sign.ecdsa;
 
-pub const ES256 = SigningECDSA(ecdsa.EcdsaP256Sha256, "ES256");
-pub const ES384 = SigningECDSA(ecdsa.EcdsaP384Sha384, "ES384");
-// pub const ES512 = SigningECDSA(ecdsa.EcdsaP512Sha512, "ES512");
+pub const SigningES256 = SignECDSA(ecdsa.EcdsaP256Sha256, "ES256");
+pub const SigningES384 = SignECDSA(ecdsa.EcdsaP384Sha384, "ES384");
+// pub const SigningES512 = SignECDSA(ecdsa.EcdsaP512Sha512, "ES512");
 
-pub fn SigningECDSA(comptime EC: type, comptime name: []const u8) type {
+pub fn SignECDSA(comptime EC: type, comptime name: []const u8) type {
     return struct {
         const Self = @This();
 
@@ -53,8 +53,8 @@ pub fn SigningECDSA(comptime EC: type, comptime name: []const u8) type {
     };
 }
 
-test "ES256" {
-    const h = ES256.init();
+test "SigningES256" {
+    const h = SigningES256.init();
 
     const alg = h.alg();
     const signLength = h.signLength();
@@ -78,8 +78,8 @@ test "ES256" {
 
 }
 
-test "ES384" {
-    const h = ES384.init();
+test "SigningES384" {
+    const h = SigningES384.init();
 
     const alg = h.alg();
     const signLength = h.signLength();

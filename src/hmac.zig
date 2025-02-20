@@ -3,11 +3,11 @@ const fmt = std.fmt;
 const testing = std.testing;
 const hmac = std.crypto.auth.hmac;
 
-pub const HS256 = SigningHmac(hmac.sha2.HmacSha256, "HS256");
-pub const HS384 = SigningHmac(hmac.sha2.HmacSha384, "HS384");
-pub const HS512 = SigningHmac(hmac.sha2.HmacSha512, "HS512");
+pub const SigningHS256 = SignHmac(hmac.sha2.HmacSha256, "HS256");
+pub const SigningHS384 = SignHmac(hmac.sha2.HmacSha384, "HS384");
+pub const SigningHS512 = SignHmac(hmac.sha2.HmacSha512, "HS512");
 
-pub fn SigningHmac(comptime Hash: type, comptime name: []const u8) type {
+pub fn SignHmac(comptime Hash: type, comptime name: []const u8) type {
     return struct {
         const Self = @This();
 
@@ -57,8 +57,8 @@ pub fn SigningHmac(comptime Hash: type, comptime name: []const u8) type {
     };
 }
 
-test "HS256" {
-    const h = HS256.init();
+test "SigningHS256" {
+    const h = SigningHS256.init();
 
     const alg = h.alg();
     const signLength = h.signLength();
@@ -82,8 +82,8 @@ test "HS256" {
 
 }
 
-test "HS384" {
-    const h = HS384.init();
+test "SigningHS384" {
+    const h = SigningHS384.init();
 
     const alg = h.alg();
     const signLength = h.signLength();
@@ -107,8 +107,8 @@ test "HS384" {
 
 }
 
-test "HS512" {
-    const h = HS512.init();
+test "SigningHS512" {
+    const h = SigningHS512.init();
 
     const alg = h.alg();
     const signLength = h.signLength();

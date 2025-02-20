@@ -4,9 +4,10 @@ const testing = std.testing;
 
 pub const Ed25519 = std.crypto.sign.Ed25519;
 
-pub const EdDSA = SigningEdDSA("EdDSA");
+pub const SigningEdDSA = SignEdDSA("EdDSA");
+pub const SigningED25519 = SignEdDSA("ED25519");
 
-pub fn SigningEdDSA(comptime name: []const u8) type {
+pub fn SignEdDSA(comptime name: []const u8) type {
     return struct {
         const Self = @This();
 
@@ -49,13 +50,38 @@ pub fn SigningEdDSA(comptime name: []const u8) type {
     };
 }
 
-test "EdDSA" {
-    const h = EdDSA.init();
+test "SigningEdDSA" {
+    const h = SigningEdDSA.init();
 
     const alg = h.alg();
     const signLength = h.signLength();
     try testing.expectEqual(64, signLength);
     try testing.expectEqualStrings("EdDSA", alg);
+
+    const kp = Ed25519.KeyPair.generate();
+
+    const msg = "test-data";
+
+    const signed = try h.sign(msg, kp.secret_key);
+    const singed_res = fmt.bytesToHex(signed, .lower);
+
+    try testing.expectEqual(128, singed_res.len);
+
+    var signature: [64]u8 = undefined;
+    _ = try fmt.hexToBytes(&signature, &singed_res);
+    const veri = h.verify(msg, signature, kp.public_key);
+
+    try testing.expectEqual(true, veri);
+
+}
+
+test "SigningED25519" {
+    const h = SigningED25519.init();
+
+    const alg = h.alg();
+    const signLength = h.signLength();
+    try testing.expectEqual(64, signLength);
+    try testing.expectEqualStrings("ED25519", alg);
 
     const kp = Ed25519.KeyPair.generate();
 
