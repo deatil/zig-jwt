@@ -63,7 +63,7 @@ pub fn main() !void {
     const token_string = try s.make(claims, kp.secret_key);
     
     // output: 
-    // make jwt: eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJleGFtcGxlLmNvbSIsImlhdCI6ImZvbyJ9.OeM7QPhXckIpT3TJiP1Q_GXCBTZ_ZR9FCLvfm-894YCu4h_AIuI91biaHvXqgYYSMHA8Ey197RDcf-Iav0VmAg
+    // make jwt: eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJleGFtcGxlLmNvbSIsImlhdCI6ImZvbyJ9.zXaymzzL0dtQZdK7DS32nqES2qoAvzFGPtcQFRvIC0k4XfRybivp1MpCjwJrI-7SIQ8zMV5wK_zIdEHS9A8tDg
     std.debug.print("make jwt: {s} \n", .{token_string});
 
     const p = jwt.SigningMethodEdDSA.init(alloc);
@@ -71,10 +71,26 @@ pub fn main() !void {
     
     // output: 
     // claims aud: example.com
-    const claims = try parsed.getClaims();
-    std.debug.print("claims aud: {} \n", .{claims.object.get("aud").?.string});
+    const claims2 = try parsed.getClaims();
+    std.debug.print("claims aud: {s} \n", .{claims2.object.get("aud").?.string});
 }
 ~~~
+
+
+### Signing Methods
+
+The JWT library have signing methods:
+
+ - `ES256`: jwt.SigningMethodES256
+ - `ES384`: jwt.SigningMethodES384
+ 
+ - `EdDSA`: jwt.SigningMethodEdDSA
+
+ - `HS256`: jwt.SigningMethodHS256
+ - `HS384`: jwt.SigningMethodHS384
+ - `HS512`: jwt.SigningMethodHS512
+
+ - `none`: jwt.SigningMethodNone
 
 
 ### LICENSE

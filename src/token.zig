@@ -214,6 +214,32 @@ test "Token" {
 
 }
 
+test "Token 2" {
+    const alloc = std.heap.page_allocator;
+
+    const header: Token.Header = .{
+        .typ = "JWE",
+        .alg = "ES256",
+    };
+    const claims = .{
+        .aud = "example.com",
+        .iat = "foo",
+    };
+    const signature = "test-signature";
+
+    const check1 = "eyJ0eXAiOiJKV0UiLCJhbGciOiJFUzI1NiJ9.eyJhdWQiOiJleGFtcGxlLmNvbSIsImlhdCI6ImZvbyJ9.dGVzdC1zaWduYXR1cmU";
+
+    var token = Token.init(alloc);
+    try token.setHeader(header);
+    try token.setClaims(claims);
+    try token.setSignature(signature);
+
+    defer token.deinit();
+
+    const res1 = try token.signedString();
+    try testing.expectEqualStrings(check1, res1);
+}
+
 test "Token isExpired" {
     const alloc = std.heap.page_allocator;
 
