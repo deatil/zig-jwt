@@ -1,2 +1,58 @@
+# zig #
+######################
 .zig-cache/
 zig-out/
+
+# 编译文件 #
+###################
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+# 压缩包 #
+############
+# *.7z
+*.dmg
+# *.gz
+*.iso
+# *.jar
+# *.rar
+# *.tar
+# *.zip
+
+# 日志文件和数据库 #
+######################
+*.log
+*.sqlite
+*.db
+
+# 系统生成文件 #
+######################
+.DS_Store
+.DS_Store?
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.TemporaryItems
+.fseventsd
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# IDE 和编辑器 #
+######################
+.idea/
+out/
+.vscode/
+.vscode/settings.json
+*.sublime*
+__debug_bin
+.project
+
+
