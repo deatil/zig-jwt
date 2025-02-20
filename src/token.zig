@@ -18,6 +18,7 @@ pub const Token = struct {
     pub const Header = struct {
         typ: []const u8,
         alg: []const u8,
+        kid: ?[]const u8 = null,
     };
 
     pub fn init(alloc: Allocator) Self {
@@ -98,17 +99,29 @@ pub const Token = struct {
 
         var typ: []const u8 = "";
         if (header.object.get("typ")) |jwt_type| {
-            typ = jwt_type.string;
+            if (jwt_type == .string) {
+                typ = jwt_type.string;
+            }
         }
 
         var alg: []const u8 = "";
         if (header.object.get("alg")) |jwt_alg| {
-            alg = jwt_alg.string;
+            if (jwt_alg == .string) {
+                alg = jwt_alg.string;
+            }
+        }
+
+        var kid: []const u8 = "";
+        if (header.object.get("kid")) |jwt_kid| {
+            if (jwt_kid == .string) {
+                kid = jwt_kid.string;
+            }
         }
 
         return .{
             .typ = typ,
             .alg = alg,
+            .kid = kid,
         };
     }
 
@@ -125,10 +138,11 @@ pub const Token = struct {
        const claims = try self.getClaims();
 
         if (claims.object.get("nbf")) |jwt_nbf| {
-            const nbf = jwt_nbf.integer;
-
-            if (now > nbf) {
-                return true;
+            if (jwt_nbf == .integer) {
+                const nbf = jwt_nbf.integer;
+                if (now > nbf) {
+                    return true;
+                }
             }
         }
 
@@ -139,14 +153,15 @@ pub const Token = struct {
        const claims = try self.getClaims();
 
         if (claims.object.get("exp")) |jwt_exp| {
-            const exp = jwt_exp.integer;
-
-            if (now > exp) {
-                return true;
+            if (jwt_exp == .integer) {
+                const exp = jwt_exp.integer;
+                if (now <= exp) {
+                    return false;
+                }
             }
         }
 
-        return false;
+        return true;
     }
 
 };
@@ -238,6 +253,41 @@ test "Token 2" {
 
     const res1 = try token.signedString();
     try testing.expectEqualStrings(check1, res1);
+}
+
+test "Token 3" {
+    const alloc = std.heap.page_allocator;
+
+    const header: Token.Header = .{
+        .typ = "JWE",
+        .alg = "ES256",
+        .kid = "kids",
+    };
+    const claims = .{
+        .aud = "example.com",
+        .iat = "foo",
+    };
+    const signature = "test-signature";
+
+    const check1 = "eyJ0eXAiOiJKV0UiLCJhbGciOiJFUzI1NiIsImtpZCI6ImtpZHMifQ.eyJhdWQiOiJleGFtcGxlLmNvbSIsImlhdCI6ImZvbyJ9.dGVzdC1zaWduYXR1cmU";
+
+    var token = Token.init(alloc);
+    try token.setHeader(header);
+    try token.setClaims(claims);
+    try token.setSignature(signature);
+
+    defer token.deinit();
+
+    const res1 = try token.signedString();
+    try testing.expectEqualStrings(check1, res1);
+
+    // ================
+
+    var token2 = Token.init(alloc);
+    try token2.parse(check1);
+
+    const header2 = try token2.getHeader();
+    try testing.expectEqualStrings(header.kid.?, header2.kid.?);
 }
 
 test "Token isExpired" {

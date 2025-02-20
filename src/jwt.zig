@@ -196,16 +196,16 @@ test "parse JWTTypeInvalid" {
 test "parse JWTSignatureInvalid" {
     const alloc = std.heap.page_allocator;
 
-    const kp = eddsa.Ed25519.KeyPair.generate();
+    const kp = ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate();
 
     const token_string = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJhdWQiOiJleGFtcGxlLmNvbSIsImlhdCI6ImZvbyJ9.dGVzdC1zaWduYXR1cmU";
 
-    const p = SigningMethodEdDSA.init(alloc);
+    const p = SigningMethodES256.init(alloc);
 
     var need_true: bool = false;
     _ = p.parse(token_string, kp.public_key) catch |err| {
         need_true = true;
-        try testing.expectEqual(Error.JWTAlgoInvalid, err);
+        try testing.expectEqual(Error.JWTSignatureInvalid, err);
     };
     try testing.expectEqual(true, need_true);
 
@@ -663,5 +663,30 @@ test "getTokenHeader" {
 
     const header = try getTokenHeader(alloc, token_str);
     try testing.expectEqualStrings("ES256", header.alg);
+
+}
+
+test "SigningMethodES256 with JWTClaims" {
+    const alloc = std.heap.page_allocator;
+
+    const kp = ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate();
+
+    const claims: JWTClaims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+
+    const s = SigningMethodES256.init(alloc);
+    const token_string = try s.make(claims, kp.secret_key);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = SigningMethodES256.init(alloc);
+    var parsed = try p.parse(token_string, kp.public_key);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings(claims.aud.?, claims2.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub.?, claims2.object.get("sub").?.string);
 
 }
