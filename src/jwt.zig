@@ -12,7 +12,7 @@ pub const utils = @import("utils.zig");
 
 pub const SigningMethodES256 = JWT(ecdsa.SigningES256, ecdsa.ecdsa.EcdsaP256Sha256.SecretKey, ecdsa.ecdsa.EcdsaP256Sha256.PublicKey);
 pub const SigningMethodES384 = JWT(ecdsa.SigningES384, ecdsa.ecdsa.EcdsaP384Sha384.SecretKey, ecdsa.ecdsa.EcdsaP384Sha384.PublicKey);
-// pub const SigningMethodES512 = JWT(ecdsa.ES512, ecdsa.ecdsa.SecretKey, ecdsa.ecdsa.PublicKey);
+// pub const SigningMethodES512 = JWT(ecdsa.SigningES512, ecdsa.ecdsa.SecretKey, ecdsa.ecdsa.PublicKey);
 
 pub const SigningMethodEdDSA = JWT(eddsa.SigningEdDSA, eddsa.Ed25519.SecretKey, eddsa.Ed25519.PublicKey);
 pub const SigningMethodED25519 = JWT(eddsa.SigningED25519, eddsa.Ed25519.SecretKey, eddsa.Ed25519.PublicKey);
