@@ -124,6 +124,26 @@ pub const JWTClaims = struct {
 };
 
 pub fn getSigningMethod(name: []const u8) !type {
+    if (utils.eq(name, "RS256")) {
+        return SigningMethodRS256;
+    }
+    if (utils.eq(name, "RS384")) {
+        return SigningMethodRS384;
+    }
+    if (utils.eq(name, "RS512")) {
+        return SigningMethodRS512;
+    }
+
+    if (utils.eq(name, "PS256")) {
+        return SigningMethodPS256;
+    }
+    if (utils.eq(name, "PS384")) {
+        return SigningMethodPS384;
+    }
+    if (utils.eq(name, "PS512")) {
+        return SigningMethodPS512;
+    }
+
     if (utils.eq(name, "ES256")) {
         return SigningMethodES256;
     }
@@ -161,6 +181,14 @@ pub fn getTokenHeader(alloc: Allocator, token_string: []const u8) !token.Token.H
 }
 
 test "getSigningMethod" {
+    try testing.expectEqual(SigningMethodRS256, try getSigningMethod("RS256"));
+    try testing.expectEqual(SigningMethodRS384, try getSigningMethod("RS384"));
+    try testing.expectEqual(SigningMethodRS512, try getSigningMethod("RS512"));
+
+    try testing.expectEqual(SigningMethodPS256, try getSigningMethod("PS256"));
+    try testing.expectEqual(SigningMethodPS384, try getSigningMethod("PS384"));
+    try testing.expectEqual(SigningMethodPS512, try getSigningMethod("PS512"));
+
     try testing.expectEqual(SigningMethodES256, try getSigningMethod("ES256"));
     try testing.expectEqual(SigningMethodES384, try getSigningMethod("ES384"));
 
