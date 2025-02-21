@@ -6,6 +6,8 @@ const ff = std.crypto.ff;
 pub const max_modulus_bits = 4096;
 pub const max_modulus_len = max_modulus_bits / 8;
 
+pub const PSSSaltLengthAuto = 0;
+
 const Modulus = std.crypto.ff.Modulus(max_modulus_bits);
 const Fe = Modulus.Fe;
 
@@ -524,8 +526,10 @@ pub fn Pss(comptime Hash: type) type {
                 };
 
                 const em_bits = self.key_pair.public.modulus.bits() - 1;
-                const em = try emsaEncode(hashed, salt, em_bits, out);
+                const em = try emsaPSSEncode(hashed, salt, em_bits, out);
+
                 try self.key_pair.encrypt(em, em);
+
                 return .{ .bytes = em };
             }
         };
@@ -551,57 +555,31 @@ pub fn Pss(comptime Hash: type) type {
 
             pub fn verify(self: *Verifier) !void {
                 const pk = self.public_key;
-                const s = try Fe.fromBytes(pk.modulus, self.sig.bytes, .big);
-                const emm = try pk.modulus.powPublic(s, pk.public_exponent);
 
                 var em_buf: [max_modulus_len]u8 = undefined;
                 const em_bits = pk.modulus.bits() - 1;
                 const em_len = std.math.divCeil(usize, em_bits, 8) catch unreachable;
-                var em = em_buf[0..em_len];
+                const em = em_buf[0..em_len];
+
+                const s = try Fe.fromBytes(pk.modulus, self.sig.bytes, .big);
+                const emm = try pk.modulus.powPublic(s, pk.public_exponent);
                 try emm.toBytes(em, .big);
 
-                if (em.len < Hash.digest_length + self.salt_len + 2) return error.Inconsistent;
-                if (em[em.len - 1] != 0xbc) return error.Inconsistent;
+                var mHash: [Hash.digest_length]u8 = undefined;
+                self.h.final(&mHash);
 
-                const db = em[0 .. em.len - Hash.digest_length - 1];
-                if (@clz(db[0]) < em.len * 8 - em_bits) return error.Inconsistent;
-
-                const expected_hash = em[db.len..][0..Hash.digest_length];
-                var mgf_buf: [max_modulus_len]u8 = undefined;
-                const db_mask = mgf1(Hash, expected_hash, mgf_buf[0..db.len]);
-                for (db, db_mask) |*v, m| v.* ^= m;
-
-                if (self.salt_len == 0) {
-                    if (std.mem.indexOf(u8, db, &[_]u8{0x01})) |ps_len| {
-                        self.salt_len = db.len - ps_len - 1;
-                    } else {
-                        return error.ErrorVerification;
-                    }
-                }
-
-                for (1..db.len - self.salt_len - 1) |i| {
-                    if (db[i] != 0) return error.Inconsistent;
-                }
-                if (db[db.len - self.salt_len - 1] != 1) return error.Inconsistent;
-                const salt = db[db.len - self.salt_len ..];
-                var mp_buf: [max_modulus_len]u8 = undefined;
-                var mp = mp_buf[0 .. 8 + Hash.digest_length + self.salt_len];
-                @memset(mp[0..8], 0);
-                self.h.final(mp[8..][0..Hash.digest_length]);
-                @memcpy(mp[8 + Hash.digest_length ..][0..salt.len], salt);
-
-                var actual_hash: [Hash.digest_length]u8 = undefined;
-                Hash.hash(mp, &actual_hash, .{});
-
-                if (!std.mem.eql(u8, expected_hash, &actual_hash)) return error.Inconsistent;
+                const mod_bits = self.public_key.modulus.bits();
+                try emsaPSSVerify(&mHash, em, mod_bits - 1, self.salt_len);
             }
         };
 
         /// PSS Encrypted Message Signature Appendix
-        fn emsaEncode(msg_hash: [Hash.digest_length]u8, salt: []const u8, em_bits: usize, out: []u8) ![]u8 {
-            const em_len = std.math.divCeil(usize, em_bits, 8) catch unreachable;
+        fn emsaPSSEncode(msg_hash: [Hash.digest_length]u8, salt: []const u8, em_bits: usize, out: []u8) ![]u8 {
+            // emLen = \ceil(emBits/8)
+            const em_len = ((em_bits - 1) / 8) + 1;
+            const s_len = salt.len;
 
-            if (em_len < Hash.digest_length + salt.len + 2) return error.Encoding;
+            if (em_len < Hash.digest_length + s_len + 2) return error.ErrMsgTooLong;
 
             // EM = maskedDB || H || 0xbc
             var em = out[0..em_len];
@@ -609,10 +587,10 @@ pub fn Pss(comptime Hash: type) type {
 
             var mp_buf: [max_modulus_len]u8 = undefined;
             // M' = (0x)00 00 00 00 00 00 00 00 || mHash || salt;
-            const mp = mp_buf[0 .. 8 + Hash.digest_length + salt.len];
+            const mp = mp_buf[0 .. 8 + Hash.digest_length + s_len];
             @memset(mp[0..8], 0);
             @memcpy(mp[8..][0..Hash.digest_length], &msg_hash);
-            @memcpy(mp[8 + Hash.digest_length ..][0..salt.len], salt);
+            @memcpy(mp[8 + Hash.digest_length ..][0..s_len], salt);
 
             // H = Hash(M')
             const hash = em[em.len - 1 - Hash.digest_length ..][0..Hash.digest_length];
@@ -620,13 +598,19 @@ pub fn Pss(comptime Hash: type) type {
 
             // DB = PS || 0x01 || salt
             var db = em[0 .. em_len - Hash.digest_length - 1];
-            @memset(db[0 .. db.len - salt.len - 1], 0);
-            db[db.len - salt.len - 1] = 1;
-            @memcpy(db[db.len - salt.len ..], salt);
+            @memset(db[0 .. db.len - s_len - 1], 0);
+            db[db.len - s_len - 1] = 1;
+            @memcpy(db[db.len - s_len ..], salt);
 
             var mgf_buf: [max_modulus_len]u8 = undefined;
-            const db_mask = mgf1(Hash, hash, mgf_buf[0..db.len]);
-            for (db, db_mask) |*v, m| v.* ^= m;
+            const mgf_len = em_len - Hash.digest_length - 1;
+            const mgf_out = mgf_buf[0 .. ((mgf_len - 1) / Hash.digest_length + 1) * Hash.digest_length];
+            const dbMask = try MGF1(mgf_out, hash, mgf_len);
+
+            var i: usize = 0;
+            while (i < dbMask.len) : (i += 1) {
+                db[i] = db[i] ^ dbMask[i];
+            }
 
             // Set the leftmost 8emLen - emBits bits of the leftmost octet
             // in maskedDB to zero.
@@ -635,6 +619,143 @@ pub fn Pss(comptime Hash: type) type {
             db[0] &= mask;
 
             return em;
+        }
+
+        fn emsaPSSVerify(mHash: []const u8, em: []const u8, emBit: usize, slen: usize) !void {
+            var sLen = slen;
+
+            // 1.   If the length of M is greater than the input limitation for
+            //      the hash function (2^61 - 1 octets for SHA-1), output
+            //      "inconsistent" and stop.
+            // All the cryptographic hash functions in the standard library have a limit of >= 2^61 - 1.
+            // Even then, this check is only there for paranoia. In the context of TLS certificates, emBit cannot exceed 4096.
+            if (emBit >= 1 << 61) {
+                return error.InvalidSignature;
+            }
+
+            // emLen = \ceil(emBits/8)
+            const emLen = ((emBit - 1) / 8) + 1;
+            std.debug.assert(emLen == em.len);
+
+            // 2.   Let mHash = Hash(M), an octet string of length hLen.
+            const hlen = Hash.digest_length;
+            if (hlen != mHash.len) {
+                return error.InvalidSignature;
+            }
+
+            // 3.   If emLen < hLen + sLen + 2, output "inconsistent" and stop.
+            if (emLen < Hash.digest_length + sLen + 2) {
+                return error.InvalidSignature;
+            }
+
+            // 4.   If the rightmost octet of EM does not have hexadecimal value
+            //      0xbc, output "inconsistent" and stop.
+            if (em[em.len - 1] != 0xbc) {
+                return error.InvalidSignature;
+            }
+
+            // 5.   Let maskedDB be the leftmost emLen - hLen - 1 octets of EM,
+            //      and let H be the next hLen octets.
+            const maskedDB = em[0..(emLen - Hash.digest_length - 1)];
+            const h = em[(emLen - Hash.digest_length - 1)..(emLen - 1)][0..Hash.digest_length];
+
+            // 6.   If the leftmost 8emLen - emBits bits of the leftmost octet in
+            //      maskedDB are not all equal to zero, output "inconsistent" and
+            //      stop.
+            const zero_bits = emLen * 8 - emBit;
+            var mask: u8 = maskedDB[0];
+            var i: usize = 0;
+            while (i < 8 - zero_bits) : (i += 1) {
+                mask = mask >> 1;
+            }
+            if (mask != 0) {
+                return error.InvalidSignature;
+            }
+
+            // 7.   Let dbMask = MGF(H, emLen - hLen - 1).
+            const mgf_len = emLen - Hash.digest_length - 1;
+            var mgf_out_buf: [512]u8 = undefined;
+            if (mgf_len > mgf_out_buf.len) { // Modulus > 4096 bits
+                return error.InvalidSignature;
+            }
+
+            const mgf_out = mgf_out_buf[0 .. ((mgf_len - 1) / Hash.digest_length + 1) * Hash.digest_length];
+            var dbMask = try MGF1(mgf_out, h, mgf_len);
+
+            // 8.   Let DB = maskedDB \xor dbMask.
+            i = 0;
+            while (i < dbMask.len) : (i += 1) {
+                dbMask[i] = maskedDB[i] ^ dbMask[i];
+            }
+
+            // 9.   Set the leftmost 8emLen - emBits bits of the leftmost octet
+            //      in DB to zero.
+            i = 0;
+            mask = 0;
+            while (i < 8 - zero_bits) : (i += 1) {
+                mask = mask << 1;
+                mask += 1;
+            }
+            dbMask[0] = dbMask[0] & mask;
+
+            if (sLen == PSSSaltLengthAuto) {
+                if (std.mem.indexOfScalar(u8, dbMask, 0x01)) |ps_len| {
+                    sLen = dbMask.len - ps_len - 1;
+                } else {
+                    return error.ErrorVerification;
+                }
+            }
+
+            // 10.  If the emLen - hLen - sLen - 2 leftmost octets of DB are not
+            //      zero or if the octet at position emLen - hLen - sLen - 1 (the
+            //      leftmost position is "position 1") does not have hexadecimal
+            //      value 0x01, output "inconsistent" and stop.
+            const ps_len = emLen - Hash.digest_length - sLen - 2;
+            for (dbMask[0..ps_len]) |e| {
+                if (e != 0x00) {
+                    return error.InvalidSignature;
+                }
+            }
+
+            if (dbMask[ps_len] != 0x01) {
+                return error.InvalidSignature;
+            }
+
+            // 11.  Let salt be the last sLen octets of DB.
+            const salt = dbMask[(dbMask.len - sLen)..];
+
+            // 12.  Let
+            //         M' = (0x)00 00 00 00 00 00 00 00 || mHash || salt ;
+            //      M' is an octet string of length 8 + hLen + sLen with eight
+            //      initial zero octets.
+            // 13.  Let H' = Hash(M'), an octet string of length hLen.
+            var h_p: [Hash.digest_length]u8 = undefined;
+            var hasher = Hash.init(.{});
+            hasher.update(&([_]u8{0} ** 8));
+            hasher.update(mHash);
+            hasher.update(salt);
+            hasher.final(&h_p);
+
+            // 14.  If H = H', output "consistent".  Otherwise, output
+            //      "inconsistent".
+            if (!std.mem.eql(u8, h, &h_p)) {
+                return error.InvalidSignature;
+            }
+        }
+
+        fn MGF1(out: []u8, seed: *const [Hash.digest_length]u8, len: usize) ![]u8 {
+            var counter: u32 = 0;
+            var idx: usize = 0;
+            var hash = seed.* ++ @as([4]u8, undefined);
+
+            while (idx < len) {
+                std.mem.writeInt(u32, hash[seed.len..][0..4], counter, .big);
+                Hash.hash(&hash, out[idx..][0..Hash.digest_length], .{});
+                idx += Hash.digest_length;
+                counter += 1;
+            }
+
+            return out[0..len];
         }
     };
 }
