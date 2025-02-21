@@ -585,16 +585,14 @@ pub fn Pss(comptime Hash: type) type {
             var em = out[0..em_len];
             em[em.len - 1] = 0xbc;
 
-            var mp_buf: [max_modulus_len]u8 = undefined;
             // M' = (0x)00 00 00 00 00 00 00 00 || mHash || salt;
-            const mp = mp_buf[0 .. 8 + Hash.digest_length + s_len];
-            @memset(mp[0..8], 0);
-            @memcpy(mp[8..][0..Hash.digest_length], &msg_hash);
-            @memcpy(mp[8 + Hash.digest_length ..][0..s_len], salt);
-
             // H = Hash(M')
             const hash = em[em.len - 1 - Hash.digest_length ..][0..Hash.digest_length];
-            Hash.hash(mp, hash, .{});
+            var hasher = Hash.init(.{});
+            hasher.update(&([_]u8{0} ** 8));
+            hasher.update(&msg_hash);
+            hasher.update(salt);
+            hasher.final(hash);
 
             // DB = PS || 0x01 || salt
             var db = em[0 .. em_len - Hash.digest_length - 1];
