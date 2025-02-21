@@ -1,6 +1,7 @@
 const std = @import("std");
 const fmt = std.fmt;
 const testing = std.testing;
+const Allocator = std.mem.Allocator;
 
 pub const ecdsa = std.crypto.sign.ecdsa;
 
@@ -10,12 +11,16 @@ pub const SigningES384 = SignECDSA(ecdsa.EcdsaP384Sha384, "ES384");
 
 pub fn SignECDSA(comptime EC: type, comptime name: []const u8) type {
     return struct {
+        alloc: Allocator, 
+
         const Self = @This();
 
         pub const encoded_length = EC.Signature.encoded_length;
 
-        pub fn init() Self {
-            return .{};
+        pub fn init(alloc: Allocator) Self {
+            return .{
+                .alloc = alloc,
+            };
         }
 
         pub fn alg(self: Self) []const u8 {
@@ -28,21 +33,28 @@ pub fn SignECDSA(comptime EC: type, comptime name: []const u8) type {
             return encoded_length;
         }
 
-        pub fn sign(self: Self, msg: []const u8, key: EC.SecretKey) ![encoded_length]u8 {
-            _ = self;
-
+        pub fn sign(self: Self, msg: []const u8, key: EC.SecretKey) ![]u8 {
             var secret_key = try EC.KeyPair.fromSecretKey(key);
 
             const sig = try secret_key.sign(msg[0..], null);
             const out: [encoded_length]u8 = sig.toBytes();
-            
-            return out;
+
+            const out_string = try self.alloc.alloc(u8, @as(usize, @intCast(self.signLength())));
+            @memcpy(out_string[0..], out[0..]);
+
+            return out_string;
         }
 
-        pub fn verify(self: Self, msg: []const u8, signature: [encoded_length]u8, key: EC.PublicKey) bool {
-            _ = self;
+        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: EC.PublicKey) bool {
+            const sign_length = self.signLength();
+            if (signature.len != sign_length) {
+                return false;
+            }
+            
+            var signed: [encoded_length]u8 = undefined;
+            @memcpy(signed[0..], signature);
 
-            const sig = EC.Signature.fromBytes(signature);
+            const sig = EC.Signature.fromBytes(signed);
             
             sig.verify(msg, key) catch {
                 return false;
@@ -54,7 +66,9 @@ pub fn SignECDSA(comptime EC: type, comptime name: []const u8) type {
 }
 
 test "SigningES256" {
-    const h = SigningES256.init();
+    const alloc = std.heap.page_allocator;
+
+    const h = SigningES256.init(alloc);
 
     const alg = h.alg();
     const signLength = h.signLength();
@@ -66,20 +80,19 @@ test "SigningES256" {
     const msg = "test-data";
 
     const signed = try h.sign(msg, kp.secret_key);
-    const singed_res = fmt.bytesToHex(signed, .lower);
 
-    try testing.expectEqual(128, singed_res.len);
+    try testing.expectEqual(64, signed.len);
 
-    var signature: [64]u8 = undefined;
-    _ = try fmt.hexToBytes(&signature, &singed_res);
-    const veri = h.verify(msg, signature, kp.public_key);
+    const veri = h.verify(msg, signed, kp.public_key);
 
     try testing.expectEqual(true, veri);
 
 }
 
 test "SigningES384" {
-    const h = SigningES384.init();
+    const alloc = std.heap.page_allocator;
+
+    const h = SigningES384.init(alloc);
 
     const alg = h.alg();
     const signLength = h.signLength();
@@ -91,13 +104,10 @@ test "SigningES384" {
     const msg = "test-data";
 
     const signed = try h.sign(msg, kp.secret_key);
-    const singed_res = fmt.bytesToHex(signed, .lower);
 
-    try testing.expectEqual(192, singed_res.len);
+    try testing.expectEqual(96, signed.len);
 
-    var signature: [96]u8 = undefined;
-    _ = try fmt.hexToBytes(&signature, &singed_res);
-    const veri = h.verify(msg, signature, kp.public_key);
+    const veri = h.verify(msg, signed, kp.public_key);
 
     try testing.expectEqual(true, veri);
 

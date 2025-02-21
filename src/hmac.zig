@@ -2,6 +2,7 @@ const std = @import("std");
 const fmt = std.fmt;
 const testing = std.testing;
 const hmac = std.crypto.auth.hmac;
+const Allocator = std.mem.Allocator;
 
 pub const SigningHS256 = SignHmac(hmac.sha2.HmacSha256, "HS256");
 pub const SigningHS384 = SignHmac(hmac.sha2.HmacSha384, "HS384");
@@ -9,12 +10,16 @@ pub const SigningHS512 = SignHmac(hmac.sha2.HmacSha512, "HS512");
 
 pub fn SignHmac(comptime Hash: type, comptime name: []const u8) type {
     return struct {
+        alloc: Allocator, 
+
         const Self = @This();
 
         pub const mac_length = Hash.mac_length;
 
-        pub fn init() Self {
-            return .{};
+        pub fn init(alloc: Allocator) Self {
+            return .{
+                .alloc = alloc,
+            };
         }
 
         pub fn alg(self: Self) []const u8 {
@@ -27,21 +32,25 @@ pub fn SignHmac(comptime Hash: type, comptime name: []const u8) type {
             return mac_length;
         }
 
-        pub fn sign(self: Self, msg: []const u8, key: []const u8) ![mac_length]u8 {
-            _ = self;
-
+        pub fn sign(self: Self, msg: []const u8, key: []const u8) ![]u8 {
             var h = Hash.init(key);
             h.update(msg[0..]);
 
             var out: [mac_length]u8 = undefined;
             h.final(out[0..]);
 
-            return out;
+            const out_string = try self.alloc.alloc(u8, @as(usize, @intCast(self.signLength())));
+            @memcpy(out_string[0..], out[0..]);
+
+            return out_string;
         }
 
-        pub fn verify(self: Self, msg: []const u8, signature: [mac_length]u8, key: []const u8) bool {
-            _ = self;
-            
+        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: []const u8) bool {
+            const sign_length = self.signLength();
+            if (signature.len != sign_length) {
+                return false;
+            }
+                        
             var h = Hash.init(key);
             h.update(msg[0..]);
 
@@ -58,7 +67,8 @@ pub fn SignHmac(comptime Hash: type, comptime name: []const u8) type {
 }
 
 test "SigningHS256" {
-    const h = SigningHS256.init();
+    const alloc = std.heap.page_allocator;
+    const h = SigningHS256.init(alloc);
 
     const alg = h.alg();
     const signLength = h.signLength();
@@ -70,20 +80,22 @@ test "SigningHS256" {
     const sign = "21a286fd6fd9f52676007c66d0f883db46d06158c266d33fb537c23bc618e567";
 
     const signed = try h.sign(msg, key);
-    const singed_res = fmt.bytesToHex(signed, .lower);
+
+    var signature2: [32]u8 = undefined;
+    @memcpy(signature2[0..], signed);
+    const singed_res = fmt.bytesToHex(signature2, .lower);
 
     try testing.expectEqualStrings(sign, singed_res[0..]);
 
-    var signature: [32]u8 = undefined;
-    _ = try fmt.hexToBytes(&signature, sign);
-    const veri = h.verify(msg, signature, key);
+    const veri = h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
 
 }
 
 test "SigningHS384" {
-    const h = SigningHS384.init();
+    const alloc = std.heap.page_allocator;
+    const h = SigningHS384.init(alloc);
 
     const alg = h.alg();
     const signLength = h.signLength();
@@ -95,20 +107,21 @@ test "SigningHS384" {
     const sign = "7ef9106e87232142b352343c291d323498d8a8426029181ddf61a65d0f1bc2c497c86a1091f66d97c2179a18d6e67bdf";
 
     const signed = try h.sign(msg, key);
-    const singed_res = fmt.bytesToHex(signed, .lower);
+    var signature2: [48]u8 = undefined;
+    @memcpy(signature2[0..], signed);
+    const singed_res = fmt.bytesToHex(signature2, .lower);
 
     try testing.expectEqualStrings(sign, singed_res[0..]);
 
-    var signature: [48]u8 = undefined;
-    _ = try fmt.hexToBytes(&signature, sign);
-    const veri = h.verify(msg, signature, key);
+    const veri = h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
 
 }
 
 test "SigningHS512" {
-    const h = SigningHS512.init();
+    const alloc = std.heap.page_allocator;
+    const h = SigningHS512.init(alloc);
 
     const alg = h.alg();
     const signLength = h.signLength();
@@ -120,13 +133,13 @@ test "SigningHS512" {
     const sign = "080e166f475f1c5d61f26b94d45a0cd822729a525e3a3865b87cdf58a36f039ea1948735aab3ad5027d553ad06487fb57d3a9034d2861300297d6cebf838f5bf";
 
     const signed = try h.sign(msg, key);
-    const singed_res = fmt.bytesToHex(signed, .lower);
+    var signature2: [64]u8 = undefined;
+    @memcpy(signature2[0..], signed);
+    const singed_res = fmt.bytesToHex(signature2, .lower);
 
     try testing.expectEqualStrings(sign, singed_res[0..]);
 
-    var signature: [64]u8 = undefined;
-    _ = try fmt.hexToBytes(&signature, sign);
-    const veri = h.verify(msg, signature, key);
+    const veri = h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
 

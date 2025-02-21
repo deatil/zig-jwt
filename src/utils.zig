@@ -5,6 +5,18 @@ const Allocator = std.mem.Allocator;
 pub const json = std.json;
 pub const base64 = std.base64;
 
+pub fn base64Decode(alloc: Allocator, input: []const u8) ![]const u8 {
+    const decoder = base64.standard.Decoder;
+    const decode_len = try decoder.calcSizeForSlice(input);
+
+    const buffer = try alloc.alloc(u8, decode_len);
+    _ = decoder.decode(buffer, input) catch {
+        return "";
+    };
+
+    return buffer[0..];
+}
+
 pub fn base64UrlEncode(alloc: Allocator, input: []const u8) ![]const u8 {
     const encoder = base64.url_safe_no_pad.Encoder;
     const encode_len = encoder.calcSize(input.len);
@@ -39,6 +51,10 @@ pub fn jsonEncode(alloc: Allocator, value: anytype) ![]const u8 {
 pub fn jsonDecode(alloc: Allocator, value: []const u8) !json.Value {
     const parsed = try json.parseFromSlice(json.Value, alloc, value, .{});
     return parsed.value;
+}
+
+pub fn eq(rest: []const u8, needle: []const u8) bool {
+    return std.mem.eql(u8, rest, needle);
 }
 
 test "base64UrlEncode" {

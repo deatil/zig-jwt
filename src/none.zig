@@ -1,17 +1,22 @@
 const std = @import("std");
 const fmt = std.fmt;
 const testing = std.testing;
+const Allocator = std.mem.Allocator;
 
 pub const SigningNone = SignNone("none");
 
 pub fn SignNone(comptime name: []const u8) type {
     return struct {
+        alloc: Allocator, 
+
         const Self = @This();
 
         pub const encoded_length = 0;
 
-        pub fn init() Self {
-            return .{};
+        pub fn init(alloc: Allocator) Self {
+            return .{
+                .alloc = alloc,
+            };
         }
 
         pub fn alg(self: Self) []const u8 {
@@ -24,20 +29,23 @@ pub fn SignNone(comptime name: []const u8) type {
             return encoded_length;
         }
 
-        pub fn sign(self: Self, msg: []const u8, key: []const u8) ![encoded_length]u8 {
+        pub fn sign(self: Self, msg: []const u8, key: []const u8) ![]u8 {
             _ = self;
             _ = msg;
             _ = key;
 
-            const out: [encoded_length]u8 = undefined;
+            const out: []u8 = undefined;
             return out;
         }
 
-        pub fn verify(self: Self, msg: []const u8, signature: [encoded_length]u8, key: []const u8) bool {
+        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: []const u8) bool {
             _ = self;
             _ = msg;
-            _ = signature;
             _ = key;
+
+            if (signature.len > 0) {
+                return false;
+            }
 
             return true;
         }
@@ -45,7 +53,8 @@ pub fn SignNone(comptime name: []const u8) type {
 }
 
 test "SigningNone" {
-    const h = SigningNone.init();
+    const alloc = std.heap.page_allocator;
+    const h = SigningNone.init(alloc);
 
     const alg = h.alg();
     const signLength = h.signLength();
@@ -55,14 +64,14 @@ test "SigningNone" {
     const msg = "test-data";
 
     const signed = try h.sign(msg, "");
-    const singed_res = fmt.bytesToHex(signed, .lower);
+    try testing.expectEqual(0, signed.len);
 
-    try testing.expectEqual(0, singed_res.len);
-
-    var signature: [0]u8 = undefined;
-    _ = try fmt.hexToBytes(&signature, &singed_res);
-    const veri = h.verify(msg, signature, "");
-
+    const veri = h.verify(msg, signed, "");
     try testing.expectEqual(true, veri);
+
+    var buf2: [5]u8 = "hello".*;
+    const signed2: []u8 = &buf2;
+    const veri2 = h.verify(msg, signed2[0..], "");
+    try testing.expectEqual(false, veri2);
 
 }

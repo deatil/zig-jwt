@@ -56,14 +56,14 @@ pub fn main() !void {
 
     const claims = .{
         .aud = "example.com",
-        .iat = "foo",
+        .sub = "foo",
     };
 
     const s = jwt.SigningMethodEdDSA.init(alloc);
     const token_string = try s.make(claims, kp.secret_key);
     
     // output: 
-    // make jwt: eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJleGFtcGxlLmNvbSIsImlhdCI6ImZvbyJ9.zXaymzzL0dtQZdK7DS32nqES2qoAvzFGPtcQFRvIC0k4XfRybivp1MpCjwJrI-7SIQ8zMV5wK_zIdEHS9A8tDg
+    // make jwt: eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJleGFtcGxlLmNvbSIsInN1YiI6ImZvbyJ9.8aYTV-9_Z1RQUPepUlut9gvniX_Cx_z8P60Z5FbnMMgNLPNP29ZtNG3k6pcU2TY_O3DkSsdxbN2HkmgvjDUPBg
     std.debug.print("make jwt: {s} \n", .{token_string});
 
     const p = jwt.SigningMethodEdDSA.init(alloc);
@@ -80,6 +80,14 @@ pub fn main() !void {
 ### Signing Methods
 
 The JWT library have signing methods:
+
+ - `RS256`: jwt.SigningMethodRS256
+ - `RS384`: jwt.SigningMethodRS384
+ - `RS512`: jwt.SigningMethodRS512
+
+ - `PS256`: jwt.SigningMethodPS256
+ - `PS384`: jwt.SigningMethodPS384
+ - `PS512`: jwt.SigningMethodPS512
 
  - `ES256`: jwt.SigningMethodES256
  - `ES384`: jwt.SigningMethodES384

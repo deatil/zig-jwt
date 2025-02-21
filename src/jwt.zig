@@ -3,12 +3,24 @@ const fmt = std.fmt;
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 
+pub const crypto_rsa = @import("rsa/rsa.zig");
+
+pub const token = @import("token.zig");
+pub const utils = @import("utils.zig");
+pub const rsa = @import("rsa.zig");
+pub const rsa_pss = @import("rsa_pss.zig");
 pub const ecdsa = @import("ecdsa.zig");
 pub const eddsa = @import("eddsa.zig");
 pub const hmac = @import("hmac.zig");
 pub const none = @import("none.zig");
-pub const token = @import("token.zig");
-pub const utils = @import("utils.zig");
+
+pub const SigningMethodRS256 = JWT(rsa.SigningRS256, crypto_rsa.KeyPair, crypto_rsa.PublicKey);
+pub const SigningMethodRS384 = JWT(rsa.SigningRS384, crypto_rsa.KeyPair, crypto_rsa.PublicKey);
+pub const SigningMethodRS512 = JWT(rsa.SigningRS512, crypto_rsa.KeyPair, crypto_rsa.PublicKey);
+
+pub const SigningMethodPS256 = JWT(rsa_pss.SigningPS256, crypto_rsa.KeyPair, crypto_rsa.PublicKey);
+pub const SigningMethodPS384 = JWT(rsa_pss.SigningPS384, crypto_rsa.KeyPair, crypto_rsa.PublicKey);
+pub const SigningMethodPS512 = JWT(rsa_pss.SigningPS512, crypto_rsa.KeyPair, crypto_rsa.PublicKey);
 
 pub const SigningMethodES256 = JWT(ecdsa.SigningES256, ecdsa.ecdsa.EcdsaP256Sha256.SecretKey, ecdsa.ecdsa.EcdsaP256Sha256.PublicKey);
 pub const SigningMethodES384 = JWT(ecdsa.SigningES384, ecdsa.ecdsa.EcdsaP384Sha384.SecretKey, ecdsa.ecdsa.EcdsaP384Sha384.PublicKey);
@@ -25,7 +37,6 @@ pub const SigningMethodNone = JWT(none.SigningNone, []const u8, []const u8);
 
 pub const Error = error {
     JWTVerifyFail,
-    JWTSignatureInvalid,
     JWTSigningMethodNotExists,
     JWTTypeInvalid,
     JWTAlgoInvalid
@@ -40,7 +51,7 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
 
         pub fn init(alloc: Allocator) Self {
             return .{
-                .signer = Signer.init(),
+                .signer = Signer.init(alloc),
                 .alloc = alloc,
             };
         }
@@ -56,8 +67,10 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
             const signed = try t.signingString();
             defer t.deinit();
 
-            var signed_string = try self.signer.sign(signed, key);
-            try t.setSignature(&signed_string);
+            const signed_string = try self.signer.sign(signed, key);
+            try t.setSignature(signed_string);
+
+            defer self.alloc.free(signed_string);
 
             const sig = try t.signedString();
             return sig;
@@ -68,25 +81,22 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
             try t.parse(token_string);
 
             const header = try t.getHeader();
-            if (!eq(header.typ, "JWT")) {
+            if (!utils.eq(header.typ, "JWT")) {
                 return Error.JWTTypeInvalid;
             }
-            if (!eq(header.alg, self.signer.alg())) {
+            if (!utils.eq(header.alg, self.signer.alg())) {
                 return Error.JWTAlgoInvalid;
             }
 
             const token_sign = t.getSignature();
-
-            const sign_length = self.signer.signLength();
-            if (token_sign.len != sign_length) {
-                return Error.JWTSignatureInvalid;
-            }
-
-            var sign: [self.signer.signLength()]u8 = undefined;
-            @memcpy(sign[0..], token_sign);
     
+            const signed = try self.alloc.alloc(u8, token_sign.len);
+            @memcpy(signed[0..], token_sign[0..]);
+
+            defer self.alloc.free(signed);
+
             const msg = try t.signingString();
-            if (!self.signer.verify(msg, sign, key)) {
+            if (!self.signer.verify(msg, signed, key)) {
                 return Error.JWTVerifyFail;
             }
 
@@ -114,28 +124,28 @@ pub const JWTClaims = struct {
 };
 
 pub fn getSigningMethod(name: []const u8) !type {
-    if (eq(name, "ES256")) {
+    if (utils.eq(name, "ES256")) {
         return SigningMethodES256;
     }
-    if (eq(name, "ES384")) {
+    if (utils.eq(name, "ES384")) {
         return SigningMethodES384;
     }
 
-    if (eq(name, "EdDSA")) {
+    if (utils.eq(name, "EdDSA")) {
         return SigningMethodEdDSA;
     }
 
-    if (eq(name, "HS256")) {
+    if (utils.eq(name, "HS256")) {
         return SigningMethodHS256;
     }
-    if (eq(name, "HS384")) {
+    if (utils.eq(name, "HS384")) {
         return SigningMethodHS384;
     }
-    if (eq(name, "HS512")) {
+    if (utils.eq(name, "HS512")) {
         return SigningMethodHS512;
     }
 
-    if (eq(name, "none")) {
+    if (utils.eq(name, "none")) {
         return SigningMethodNone;
     }
 
@@ -148,10 +158,6 @@ pub fn getTokenHeader(alloc: Allocator, token_string: []const u8) !token.Token.H
 
     const header = try t.getHeader();
     return header;
-}
-
-pub fn eq(rest: []const u8, needle: []const u8) bool {
-    return std.mem.eql(u8, rest, needle);
 }
 
 test "getSigningMethod" {
@@ -205,7 +211,7 @@ test "parse JWTSignatureInvalid" {
     var need_true: bool = false;
     _ = p.parse(token_string, kp.public_key) catch |err| {
         need_true = true;
-        try testing.expectEqual(Error.JWTSignatureInvalid, err);
+        try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
 
@@ -218,7 +224,7 @@ test "SigningMethodEdDSA" {
 
     const claims = .{
         .aud = "example.com",
-        .iat = "foo",
+        .sub = "foo",
     };
 
     const s = SigningMethodEdDSA.init(alloc);
@@ -232,7 +238,7 @@ test "SigningMethodEdDSA" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.iat, claims2.object.get("iat").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
 
 }
 
@@ -243,7 +249,7 @@ test "SigningMethodES256" {
 
     const claims = .{
         .aud = "example.com",
-        .iat = "foo",
+        .sub = "foo",
     };
 
     const s = SigningMethodES256.init(alloc);
@@ -257,7 +263,7 @@ test "SigningMethodES256" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.iat, claims2.object.get("iat").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
 
 }
 
@@ -268,7 +274,7 @@ test "SigningMethodES384" {
 
     const claims = .{
         .aud = "example.com",
-        .iat = "foo",
+        .sub = "foo",
     };
 
     const s = SigningMethodES384.init(alloc);
@@ -282,7 +288,7 @@ test "SigningMethodES384" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.iat, claims2.object.get("iat").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
 
 }
 
@@ -291,7 +297,7 @@ test "SigningMethodHS256" {
 
     const claims = .{
         .aud = "example.com",
-        .iat = "foo",
+        .sub = "foo",
     };
     const key = "test-key";
 
@@ -306,7 +312,7 @@ test "SigningMethodHS256" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.iat, claims2.object.get("iat").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
 
 }
 
@@ -315,7 +321,7 @@ test "SigningMethodHS384" {
 
     const claims = .{
         .aud = "example.com",
-        .iat = "foo",
+        .sub = "foo",
     };
     const key = "test-key";
 
@@ -330,7 +336,7 @@ test "SigningMethodHS384" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.iat, claims2.object.get("iat").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
 
 }
 
@@ -339,7 +345,7 @@ test "SigningMethodHS512" {
 
     const claims = .{
         .aud = "example.com",
-        .iat = "foo",
+        .sub = "foo",
     };
     const key = "test-key";
 
@@ -354,7 +360,7 @@ test "SigningMethodHS512" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.iat, claims2.object.get("iat").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
 
 }
 
@@ -363,7 +369,7 @@ test "SigningMethodNone" {
 
     const claims = .{
         .aud = "example.com",
-        .iat = "foo",
+        .sub = "foo",
     };
     const key = "";
 
@@ -378,7 +384,7 @@ test "SigningMethodNone" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.iat, claims2.object.get("iat").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
 
 }
 
@@ -482,7 +488,7 @@ test "SigningMethodES256 Check fail" {
     var need_true: bool = false;
     _ = p.parse(token_str, public_key) catch |err| {
         need_true = true;
-        try testing.expectEqual(Error.JWTSignatureInvalid, err);
+        try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
 
@@ -688,5 +694,268 @@ test "SigningMethodES256 with JWTClaims" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud.?, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub.?, claims2.object.get("sub").?.string);
+
+}
+
+test "SigningMethodRS256" {
+    const alloc = std.heap.page_allocator;
+
+    const prikey = "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq";
+    const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    const secret_key = try crypto_rsa.KeyPair.fromDer(prikey_bytes);
+    const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+
+    const s = SigningMethodRS256.init(alloc);
+    const token_string = try s.make(claims, secret_key);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = SigningMethodRS256.init(alloc);
+    var parsed = try p.parse(token_string, public_key);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
+
+}
+
+test "SigningMethodRS384" {
+    const alloc = std.heap.page_allocator;
+
+    const prikey = "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq";
+    const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    const secret_key = try crypto_rsa.KeyPair.fromDer(prikey_bytes);
+    const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+
+    const s = SigningMethodRS384.init(alloc);
+    const token_string = try s.make(claims, secret_key);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = SigningMethodRS384.init(alloc);
+    var parsed = try p.parse(token_string, public_key);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
+
+}
+
+test "SigningMethodRS512" {
+    const alloc = std.heap.page_allocator;
+
+    const prikey = "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq";
+    const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    const secret_key = try crypto_rsa.KeyPair.fromDer(prikey_bytes);
+    const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+
+    const s = SigningMethodRS512.init(alloc);
+    const token_string = try s.make(claims, secret_key);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = SigningMethodRS512.init(alloc);
+    var parsed = try p.parse(token_string, public_key);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
+
+}
+
+test "SigningMethodPS256" {
+    const alloc = std.heap.page_allocator;
+
+    const prikey = "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq";
+    const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    const secret_key = try crypto_rsa.KeyPair.fromDer(prikey_bytes);
+    const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+
+    const s = SigningMethodPS256.init(alloc);
+    const token_string = try s.make(claims, secret_key);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = SigningMethodPS256.init(alloc);
+    var parsed = try p.parse(token_string, public_key);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
+
+}
+
+test "SigningMethodPS384" {
+    const alloc = std.heap.page_allocator;
+
+    const prikey = "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq";
+    const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    const secret_key = try crypto_rsa.KeyPair.fromDer(prikey_bytes);
+    const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+
+    const s = SigningMethodPS384.init(alloc);
+    const token_string = try s.make(claims, secret_key);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = SigningMethodPS384.init(alloc);
+    var parsed = try p.parse(token_string, public_key);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
+
+}
+
+test "SigningMethodPS512" {
+    const alloc = std.heap.page_allocator;
+
+    const prikey = "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq";
+    const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    const secret_key = try crypto_rsa.KeyPair.fromDer(prikey_bytes);
+    const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+
+    const s = SigningMethodPS512.init(alloc);
+    const token_string = try s.make(claims, secret_key);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = SigningMethodPS512.init(alloc);
+    var parsed = try p.parse(token_string, public_key);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
+
+}
+
+test "SigningMethodRS256 Check" {
+    const alloc = std.heap.page_allocator;
+
+    const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
+    const token_str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJmb28iOiJiYXIifQ.FhkiHkoESI_cG3NPigFrxEk9Z60_oXrOT2vGm9Pn6RDgYNovYORQmmA0zs1AoAOf09ly2Nx2YAg6ABqAYga1AcMFkJljwxTT5fYphTuqpWdy4BELeSYJx5Ty2gmr8e7RonuUztrdD5WfPqLKMm1Ozp_T6zALpRmwTIW0QPnaBXaQD90FplAg46Iy1UlDKr-Eupy0i5SLch5Q-p2ZpaL_5fnTIUDlxC3pWhJTyx_71qDI-mAA_5lE_VdroOeflG56sSmDxopPEG3bFlSu1eowyBfxtu0_CuVd-M42RU75Zc4Gsj6uV77MBtbMrf4_7M_NUTSgoIF3fRqxrj0NzihIBg";
+
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+    const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+
+    const p = SigningMethodRS256.init(alloc);
+    var parsed = try p.parse(token_str, public_key);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
+
+}
+
+test "SigningMethodRS384 Check" {
+    const alloc = std.heap.page_allocator;
+
+    const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
+    const token_str = "eyJhbGciOiJSUzM4NCIsInR5cCI6IkpXVCJ9.eyJmb28iOiJiYXIifQ.W-jEzRfBigtCWsinvVVuldiuilzVdU5ty0MvpLaSaqK9PlAWWlDQ1VIQ_qSKzwL5IXaZkvZFJXT3yL3n7OUVu7zCNJzdwznbC8Z-b0z2lYvcklJYi2VOFRcGbJtXUqgjk2oGsiqUMUMOLP70TTefkpsgqDxbRh9CDUfpOJgW-dU7cmgaoswe3wjUAUi6B6G2YEaiuXC0XScQYSYVKIzgKXJV8Zw-7AN_DBUI4GkTpsvQ9fVVjZM9csQiEXhYekyrKu1nu_POpQonGd8yqkIyXPECNmmqH5jH4sFiF67XhD7_JpkvLziBpI-uh86evBUadmHhb9Otqw3uV3NTaXLzJw";
+
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+    const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+
+    const p = SigningMethodRS384.init(alloc);
+    var parsed = try p.parse(token_str, public_key);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
+
+}
+
+test "SigningMethodRS512 Check" {
+    const alloc = std.heap.page_allocator;
+
+    const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
+    const token_str = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJmb28iOiJiYXIifQ.zBlLlmRrUxx4SJPUbV37Q1joRcI9EW13grnKduK3wtYKmDXbgDpF1cZ6B-2Jsm5RB8REmMiLpGms-EjXhgnyh2TSHE-9W2gA_jvshegLWtwRVDX40ODSkTb7OVuaWgiy9y7llvcknFBTIg-FnVPVpXMmeV_pvwQyhaz1SSwSPrDyxEmksz1hq7YONXhXPpGaNbMMeDTNP_1oj8DZaqTIL9TwV8_1wb2Odt_Fy58Ke2RVFijsOLdnyEAjt2n9Mxihu9i3PhNBkkxa2GbnXBfq3kzvZ_xxGGopLdHhJjcGWXO-NiwI9_tiu14NRv4L2xC0ItD9Yz68v2ZIZEp_DuzwRQ";
+
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+    const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+
+    const p = SigningMethodRS512.init(alloc);
+    var parsed = try p.parse(token_str, public_key);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
+
+}
+
+test "SigningMethodRS256 Check fail" {
+    const alloc = std.heap.page_allocator;
+
+    const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
+    const token_str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJmb28iOiJiYXIifQ.EhkiHkoESI_cG3NPigFrxEk9Z60_oXrOT2vGm9Pn6RDgYNovYORQmmA0zs1AoAOf09ly2Nx2YAg6ABqAYga1AcMFkJljwxTT5fYphTuqpWdy4BELeSYJx5Ty2gmr8e7RonuUztrdD5WfPqLKMm1Ozp_T6zALpRmwTIW0QPnaBXaQD90FplAg46Iy1UlDKr-Eupy0i5SLch5Q-p2ZpaL_5fnTIUDlxC3pWhJTyx_71qDI-mAA_5lE_VdroOeflG56sSmDxopPEG3bFlSu1eowyBfxtu0_CuVd-M42RU75Zc4Gsj6uV77MBtbMrf4_7M_NUTSgoIF3fRqxrj0NzihIBg";
+
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+    const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+
+    const p = SigningMethodRS256.init(alloc);
+
+    var need_true: bool = false;
+    _ = p.parse(token_str, public_key) catch |err| {
+        need_true = true;
+        try testing.expectEqual(Error.JWTVerifyFail, err);
+    };
+    try testing.expectEqual(true, need_true);
 
 }
