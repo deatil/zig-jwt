@@ -141,8 +141,8 @@ pub const SecretKey = struct {
     d: Fe,
     primes: [2]Fe,
 
-	// Precomputed contains precomputed values that speed up private
-	// operations, if available.
+    // Precomputed contains precomputed values that speed up private
+    // operations, if available.
     precomputed: ?PrecomputedValues = null,
 
     pub fn fromBytes(public: PublicKey, dbytes: []const u8, p: Fe, q: Fe) !SecretKey {

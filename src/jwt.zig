@@ -95,7 +95,7 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
 
             defer self.alloc.free(signed);
 
-            const msg = t.getRawNoSignature();
+            const msg = try t.signingString();
             if (!self.signer.verify(msg, signed, key)) {
                 return Error.JWTVerifyFail;
             }

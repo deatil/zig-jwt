@@ -1,7 +1,7 @@
 .{
     .name = "zig-jwt",
     .description = "A JWT library for zig.",
-    .version = "1.0.6",
+    .version = "1.0.7",
     .paths = .{
         "build.zig",
         "build.zig.zon",
