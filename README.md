@@ -60,7 +60,7 @@ pub fn main() !void {
     };
 
     const s = jwt.SigningMethodEdDSA.init(alloc);
-    const token_string = try s.make(claims, kp.secret_key);
+    const token_string = try s.sign(claims, kp.secret_key);
     
     // output: 
     // make jwt: eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJleGFtcGxlLmNvbSIsInN1YiI6ImZvbyJ9.8aYTV-9_Z1RQUPepUlut9gvniX_Cx_z8P60Z5FbnMMgNLPNP29ZtNG3k6pcU2TY_O3DkSsdxbN2HkmgvjDUPBg

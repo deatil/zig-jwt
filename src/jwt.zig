@@ -14,13 +14,13 @@ pub const eddsa = @import("eddsa.zig");
 pub const hmac = @import("hmac.zig");
 pub const none = @import("none.zig");
 
-pub const SigningMethodRS256 = JWT(rsa.SigningRS256, crypto_rsa.KeyPair, crypto_rsa.PublicKey);
-pub const SigningMethodRS384 = JWT(rsa.SigningRS384, crypto_rsa.KeyPair, crypto_rsa.PublicKey);
-pub const SigningMethodRS512 = JWT(rsa.SigningRS512, crypto_rsa.KeyPair, crypto_rsa.PublicKey);
+pub const SigningMethodRS256 = JWT(rsa.SigningRS256, crypto_rsa.SecretKey, crypto_rsa.PublicKey);
+pub const SigningMethodRS384 = JWT(rsa.SigningRS384, crypto_rsa.SecretKey, crypto_rsa.PublicKey);
+pub const SigningMethodRS512 = JWT(rsa.SigningRS512, crypto_rsa.SecretKey, crypto_rsa.PublicKey);
 
-pub const SigningMethodPS256 = JWT(rsa_pss.SigningPS256, crypto_rsa.KeyPair, crypto_rsa.PublicKey);
-pub const SigningMethodPS384 = JWT(rsa_pss.SigningPS384, crypto_rsa.KeyPair, crypto_rsa.PublicKey);
-pub const SigningMethodPS512 = JWT(rsa_pss.SigningPS512, crypto_rsa.KeyPair, crypto_rsa.PublicKey);
+pub const SigningMethodPS256 = JWT(rsa_pss.SigningPS256, crypto_rsa.SecretKey, crypto_rsa.PublicKey);
+pub const SigningMethodPS384 = JWT(rsa_pss.SigningPS384, crypto_rsa.SecretKey, crypto_rsa.PublicKey);
+pub const SigningMethodPS512 = JWT(rsa_pss.SigningPS512, crypto_rsa.SecretKey, crypto_rsa.PublicKey);
 
 pub const SigningMethodES256 = JWT(ecdsa.SigningES256, ecdsa.ecdsa.EcdsaP256Sha256.SecretKey, ecdsa.ecdsa.EcdsaP256Sha256.PublicKey);
 pub const SigningMethodES384 = JWT(ecdsa.SigningES384, ecdsa.ecdsa.EcdsaP384Sha384.SecretKey, ecdsa.ecdsa.EcdsaP384Sha384.PublicKey);
@@ -56,7 +56,7 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
             };
         }
 
-        pub fn make(self: Self, claims: anytype, key: SecretKeyType) ![]const u8 {
+        pub fn sign(self: Self, claims: anytype, key: SecretKeyType) ![]const u8 {
             var t = token.Token.init(self.alloc);
             try t.setHeader(.{
                 .typ = "JWT",
@@ -68,7 +68,7 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
             defer t.deinit();
 
             const signed_string = try self.signer.sign(signed, key);
-            try t.setSignature(signed_string);
+            t.withSignature(signed_string);
 
             defer self.alloc.free(signed_string);
 
@@ -95,7 +95,7 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
 
             defer self.alloc.free(signed);
 
-            const msg = try t.signingString();
+            const msg = t.getRawNoSignature();
             if (!self.signer.verify(msg, signed, key)) {
                 return Error.JWTVerifyFail;
             }
@@ -256,7 +256,7 @@ test "SigningMethodEdDSA" {
     };
 
     const s = SigningMethodEdDSA.init(alloc);
-    const token_string = try s.make(claims, kp.secret_key);
+    const token_string = try s.sign(claims, kp.secret_key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -281,7 +281,7 @@ test "SigningMethodES256" {
     };
 
     const s = SigningMethodES256.init(alloc);
-    const token_string = try s.make(claims, kp.secret_key);
+    const token_string = try s.sign(claims, kp.secret_key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -306,7 +306,7 @@ test "SigningMethodES384" {
     };
 
     const s = SigningMethodES384.init(alloc);
-    const token_string = try s.make(claims, kp.secret_key);
+    const token_string = try s.sign(claims, kp.secret_key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -330,7 +330,7 @@ test "SigningMethodHS256" {
     const key = "test-key";
 
     const s = SigningMethodHS256.init(alloc);
-    const token_string = try s.make(claims, key);
+    const token_string = try s.sign(claims, key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -354,7 +354,7 @@ test "SigningMethodHS384" {
     const key = "test-key";
 
     const s = SigningMethodHS384.init(alloc);
-    const token_string = try s.make(claims, key);
+    const token_string = try s.sign(claims, key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -378,7 +378,7 @@ test "SigningMethodHS512" {
     const key = "test-key";
 
     const s = SigningMethodHS512.init(alloc);
-    const token_string = try s.make(claims, key);
+    const token_string = try s.sign(claims, key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -402,7 +402,7 @@ test "SigningMethodNone" {
     const key = "";
 
     const s = SigningMethodNone.init(alloc);
-    const token_string = try s.make(claims, key);
+    const token_string = try s.sign(claims, key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -451,7 +451,7 @@ test "SigningMethodES256 Check" {
     };
 
     const s = SigningMethodES256.init(alloc);
-    const token_string = try s.make(claims, secret_key);
+    const token_string = try s.sign(claims, secret_key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -487,7 +487,7 @@ test "SigningMethodES384 Check" {
     };
 
     const s = SigningMethodES384.init(alloc);
-    const token_string = try s.make(claims, secret_key);
+    const token_string = try s.sign(claims, secret_key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -546,7 +546,7 @@ test "SigningMethodEdDSA Check" {
     };
 
     const s = SigningMethodED25519.init(alloc);
-    const token_string = try s.make(claims, secret_key);
+    const token_string = try s.sign(claims, secret_key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -599,7 +599,7 @@ test "SigningMethodHS256 Check" {
     };
 
     const s = SigningMethodHS256.init(alloc);
-    const token_string = try s.make(claims, key_bytes);
+    const token_string = try s.sign(claims, key_bytes);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -628,7 +628,7 @@ test "SigningMethodHS384 Check" {
     };
 
     const s = SigningMethodHS384.init(alloc);
-    const token_string = try s.make(claims, key_bytes);
+    const token_string = try s.sign(claims, key_bytes);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -657,7 +657,7 @@ test "SigningMethodHS512 Check" {
     };
 
     const s = SigningMethodHS512.init(alloc);
-    const token_string = try s.make(claims, key_bytes);
+    const token_string = try s.sign(claims, key_bytes);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -711,7 +711,7 @@ test "SigningMethodES256 with JWTClaims" {
     };
 
     const s = SigningMethodES256.init(alloc);
-    const token_string = try s.make(claims, kp.secret_key);
+    const token_string = try s.sign(claims, kp.secret_key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -734,7 +734,7 @@ test "SigningMethodRS256" {
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
 
-    const secret_key = try crypto_rsa.KeyPair.fromDer(prikey_bytes);
+    const secret_key = try crypto_rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
 
     const claims = .{
@@ -743,7 +743,7 @@ test "SigningMethodRS256" {
     };
 
     const s = SigningMethodRS256.init(alloc);
-    const token_string = try s.make(claims, secret_key);
+    const token_string = try s.sign(claims, secret_key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -766,7 +766,7 @@ test "SigningMethodRS384" {
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
 
-    const secret_key = try crypto_rsa.KeyPair.fromDer(prikey_bytes);
+    const secret_key = try crypto_rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
 
     const claims = .{
@@ -775,7 +775,7 @@ test "SigningMethodRS384" {
     };
 
     const s = SigningMethodRS384.init(alloc);
-    const token_string = try s.make(claims, secret_key);
+    const token_string = try s.sign(claims, secret_key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -798,7 +798,7 @@ test "SigningMethodRS512" {
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
 
-    const secret_key = try crypto_rsa.KeyPair.fromDer(prikey_bytes);
+    const secret_key = try crypto_rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
 
     const claims = .{
@@ -807,7 +807,7 @@ test "SigningMethodRS512" {
     };
 
     const s = SigningMethodRS512.init(alloc);
-    const token_string = try s.make(claims, secret_key);
+    const token_string = try s.sign(claims, secret_key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -830,7 +830,7 @@ test "SigningMethodPS256" {
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
 
-    const secret_key = try crypto_rsa.KeyPair.fromDer(prikey_bytes);
+    const secret_key = try crypto_rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
 
     const claims = .{
@@ -839,7 +839,7 @@ test "SigningMethodPS256" {
     };
 
     const s = SigningMethodPS256.init(alloc);
-    const token_string = try s.make(claims, secret_key);
+    const token_string = try s.sign(claims, secret_key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -862,7 +862,7 @@ test "SigningMethodPS384" {
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
 
-    const secret_key = try crypto_rsa.KeyPair.fromDer(prikey_bytes);
+    const secret_key = try crypto_rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
 
     const claims = .{
@@ -871,7 +871,7 @@ test "SigningMethodPS384" {
     };
 
     const s = SigningMethodPS384.init(alloc);
-    const token_string = try s.make(claims, secret_key);
+    const token_string = try s.sign(claims, secret_key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -894,7 +894,7 @@ test "SigningMethodPS512" {
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
 
-    const secret_key = try crypto_rsa.KeyPair.fromDer(prikey_bytes);
+    const secret_key = try crypto_rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
 
     const claims = .{
@@ -903,7 +903,7 @@ test "SigningMethodPS512" {
     };
 
     const s = SigningMethodPS512.init(alloc);
-    const token_string = try s.make(claims, secret_key);
+    const token_string = try s.sign(claims, secret_key);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========

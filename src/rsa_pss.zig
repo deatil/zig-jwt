@@ -39,15 +39,17 @@ pub fn SignRSAPss(comptime RSAPssType: type, comptime name: []const u8) type {
             return max_modulus_len;
         }
 
-        pub fn sign(self: Self, msg: []const u8, key: rsa.KeyPair) ![]u8 {
+        pub fn sign(self: Self, msg: []const u8, key: rsa.SecretKey) ![]u8 {
             var signer = RSAPssType.Signer.init(key, null);
             signer.update(msg[0..]);
 
             var out: [max_modulus_len]u8 = undefined;
             const sig = try signer.finalize(&out);
             
-            const out_string = try self.alloc.alloc(u8, sig.bytes.len);
-            @memcpy(out_string[0..], sig.bytes[0..]);
+            const signed = sig.toBytes();
+
+            const out_string = try self.alloc.alloc(u8, signed.len);
+            @memcpy(out_string[0..], signed[0..]);
 
             return out_string;
         }
@@ -55,9 +57,7 @@ pub fn SignRSAPss(comptime RSAPssType: type, comptime name: []const u8) type {
         pub fn verify(self: Self, msg: []const u8, signature: []u8, key: rsa.PublicKey) bool {
             _ = self;
 
-            var verifier = RSAPssType.Signature{
-                .bytes = signature,
-            };
+            var verifier = RSAPssType.Signature.fromBytes(signature);
             verifier.verify(msg, key, rsa.PSSSaltLengthAuto) catch {
                 return false;
             };
@@ -83,7 +83,7 @@ test "SigningPS256" {
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
 
-    const secret_key = try rsa.KeyPair.fromDer(prikey_bytes);
+    const secret_key = try rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try rsa.PublicKey.fromDer(pubkey_bytes);
 
     const msg = "test-data";
@@ -114,7 +114,7 @@ test "SigningPS384" {
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
 
-    const secret_key = try rsa.KeyPair.fromDer(prikey_bytes);
+    const secret_key = try rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try rsa.PublicKey.fromDer(pubkey_bytes);
 
     const msg = "test-data";
@@ -145,7 +145,7 @@ test "SigningPS512" {
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
 
-    const secret_key = try rsa.KeyPair.fromDer(prikey_bytes);
+    const secret_key = try rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try rsa.PublicKey.fromDer(pubkey_bytes);
 
     const msg = "test-data";
@@ -176,7 +176,7 @@ test "SigningPS256 check" {
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
 
-    const secret_key = try rsa.KeyPair.fromDer(prikey_bytes);
+    const secret_key = try rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try rsa.PublicKey.fromDer(pubkey_bytes);
 
     const msg = "test-data";

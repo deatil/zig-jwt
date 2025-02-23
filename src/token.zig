@@ -32,15 +32,23 @@ pub const Token = struct {
         self.alloc.free(self.claims);
     }
 
+    pub fn withHeader(self: *Self, header: []const u8) void {
+        self.header = header;
+    }
+
     pub fn setHeader(self: *Self, header: Header) !void {
         self.header = try utils.jsonEncode(self.alloc, header);
+    }
+
+    pub fn withClaims(self: *Self, claims: []const u8) void {
+        self.claims = claims;
     }
 
     pub fn setClaims(self: *Self, claims: anytype) !void {
         self.claims = try utils.jsonEncode(self.alloc, claims);
     }
 
-    pub fn setSignature(self: *Self, signature: []const u8) !void {
+    pub fn withSignature(self: *Self, signature: []const u8) void {
         self.signature = signature;
     }
 
@@ -94,6 +102,15 @@ pub const Token = struct {
         }
     }
 
+    pub fn getRaw(self: *Self) []const u8 {
+        return self.raw;
+    }
+
+    pub fn getRawNoSignature(self: *Self) []const u8 {
+        const index = std.mem.lastIndexOf(u8, self.raw, ".") orelse self.raw.len;
+        return self.raw[0..index];
+    }
+
     pub fn getHeader(self: *Self) !Header {
         const header = try utils.jsonDecode(self.alloc, self.header);
 
@@ -125,13 +142,23 @@ pub const Token = struct {
         };
     }
 
+    pub fn getHeaderT(self: *Self, comptime T: type) !T {
+        const header = try utils.jsonDecodeT(T, self.alloc, self.header);
+        return header;
+    }
+
     pub fn getClaims(self: *Self) !json.Value {
         const claims = try utils.jsonDecode(self.alloc, self.claims);
         return claims;
     }
 
+    pub fn getClaimsT(self: *Self, comptime T: type) !T {
+        const claims = try utils.jsonDecodeT(T, self.alloc, self.claims);
+        return claims;
+    }
+
     pub fn getSignature(self: *Self) []const u8 {
-       return self.signature;
+        return self.signature;
     }
 
     pub fn isPermittedFor(self: *Self, audience: []const u8) !bool {
@@ -267,7 +294,7 @@ test "Token" {
     var token = Token.init(alloc);
     try token.setHeader(header);
     try token.setClaims(claims);
-    try token.setSignature(signature);
+    token.withSignature(signature);
 
     defer token.deinit();
 
@@ -309,6 +336,25 @@ test "Token" {
     const signature3 = token3.getSignature();
     try testing.expectEqualStrings(signature, signature3);
 
+    const token51 = token3.getRaw();
+    try testing.expectEqualStrings(check2, token51);
+
+    const token5 = token3.getRawNoSignature();
+    try testing.expectEqualStrings(check1, token5);
+
+    // ====================
+
+    const check3 = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9";
+
+    var token6 = Token.init(alloc);
+    try token6.parse(check3);
+
+    const sig61 = token6.getRaw();
+    try testing.expectEqualStrings(check3, sig61);
+
+    const sig6 = token6.getRawNoSignature();
+    try testing.expectEqualStrings(check3, sig6);
+
 }
 
 test "Token 2" {
@@ -329,12 +375,23 @@ test "Token 2" {
     var token = Token.init(alloc);
     try token.setHeader(header);
     try token.setClaims(claims);
-    try token.setSignature(signature);
+    token.withSignature(signature);
 
     defer token.deinit();
 
     const res1 = try token.signedString();
     try testing.expectEqualStrings(check1, res1);
+
+    // ======
+
+    var token2 = Token.init(alloc);
+    token2.withHeader("ase123");
+    token2.withClaims("tyh78");
+    token2.withSignature("qwe");
+
+    try testing.expectEqualStrings("ase123", token2.header);
+    try testing.expectEqualStrings("tyh78", token2.claims);
+    try testing.expectEqualStrings("qwe", token2.signature);
 }
 
 test "Token 3" {
@@ -356,7 +413,7 @@ test "Token 3" {
     var token = Token.init(alloc);
     try token.setHeader(header);
     try token.setClaims(claims);
-    try token.setSignature(signature);
+    token.withSignature(signature);
 
     defer token.deinit();
 
@@ -370,6 +427,27 @@ test "Token 3" {
 
     const header2 = try token2.getHeader();
     try testing.expectEqualStrings(header.kid.?, header2.kid.?);
+
+    // ================
+
+    const claimsT = struct {
+        aud: []const u8,
+        iat: []const u8,
+    };
+    const claims3 = try token2.getClaimsT(claimsT);
+    try testing.expectEqualStrings(claims.aud, claims3.aud);
+    try testing.expectEqualStrings(claims.iat, claims3.iat);
+
+    const headerT = struct {
+        typ: []const u8,
+        alg: []const u8,
+        kid: []const u8,
+    };
+    const header3 = try token2.getHeaderT(headerT);
+    try testing.expectEqualStrings(header.typ, header3.typ);
+    try testing.expectEqualStrings(header.alg, header3.alg);
+    try testing.expectEqualStrings(header.kid.?, header3.kid);
+
 }
 
 test "Token isExpired" {

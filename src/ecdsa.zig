@@ -55,7 +55,6 @@ pub fn SignECDSA(comptime EC: type, comptime name: []const u8) type {
             @memcpy(signed[0..], signature);
 
             const sig = EC.Signature.fromBytes(signed);
-            
             sig.verify(msg, key) catch {
                 return false;
             };

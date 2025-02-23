@@ -54,7 +54,6 @@ pub fn SignEdDSA(comptime name: []const u8) type {
             @memcpy(signed[0..], signature);
 
             const sig = Ed25519.Signature.fromBytes(signed);
-            
             sig.verify(msg, key) catch {
                 return false;
             };

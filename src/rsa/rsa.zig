@@ -1,7 +1,11 @@
 //! RFC8017: Public Key Cryptography Standards #1 v2.2 (PKCS1)
 const std = @import("std");
-const der = @import("der.zig");
+const fmt = std.fmt;
 const ff = std.crypto.ff;
+const testing = std.testing;
+const Allocator = std.mem.Allocator;
+
+const der = @import("der.zig");
 
 pub const max_modulus_bits = 4096;
 pub const max_modulus_len = max_modulus_bits / 8;
@@ -11,36 +15,35 @@ pub const PSSSaltLengthAuto = 0;
 const Modulus = std.crypto.ff.Modulus(max_modulus_bits);
 const Fe = Modulus.Fe;
 
-// code from https://github.com/ianic/tls.zig
-
 pub const ValueError = error{
     Modulus,
     Exponent,
 };
 
 pub const PublicKey = struct {
-    /// `n`
-    modulus: Modulus,
-    /// `e`
-    public_exponent: Fe,
+    n: Modulus,
+    e: Fe,
 
     pub const FromBytesError = ValueError || ff.OverflowError || ff.FieldElementError || ff.InvalidModulusError || error{InsecureBitCount};
 
     pub fn fromBytes(mod: []const u8, exp: []const u8) FromBytesError!PublicKey {
-        const modulus = try Modulus.fromBytes(mod, .big);
-        if (modulus.bits() <= 512) return error.InsecureBitCount;
-        const public_exponent = try Fe.fromBytes(modulus, exp, .big);
+        const n = try Modulus.fromBytes(mod, .big);
+        if (n.bits() <= 512) return error.InsecureBitCount;
+        const e = try Fe.fromBytes(n, exp, .big);
 
         if (std.debug.runtime_safety) {
             // > the RSA public exponent e is an integer between 3 and n - 1 satisfying
             // > GCD(e,\lambda(n)) = 1, where \lambda(n) = LCM(r_1 - 1, ..., r_u - 1)
-            const e_v = public_exponent.toPrimitive(u32) catch return error.Exponent;
-            if (!public_exponent.isOdd()) return error.Exponent;
+            const e_v = e.toPrimitive(u32) catch return error.Exponent;
+            if (!e.isOdd()) return error.Exponent;
             if (e_v < 3) return error.Exponent;
-            if (modulus.v.compare(public_exponent.v) == .lt) return error.Exponent;
+            if (n.v.compare(e.v) == .lt) return error.Exponent;
         }
 
-        return .{ .modulus = modulus, .public_exponent = public_exponent };
+        return .{ 
+            .n = n, 
+            .e = e,
+        };
     }
 
     pub fn fromDer(bytes: []const u8) (der.Parser.Error || FromBytesError)!PublicKey {
@@ -65,7 +68,7 @@ pub const PublicKey = struct {
     /// randomly generated key, is NOT RECOMMENDED.
     pub fn encryptPkcsv1_5(pk: PublicKey, msg: []const u8, out: []u8) ![]const u8 {
         // align variable names with spec
-        const k = byteLen(pk.modulus.bits());
+        const k = byteLen(pk.n.bits());
         if (out.len < k) return error.BufferTooSmall;
         if (msg.len > k - 11) return error.MessageTooLong;
 
@@ -84,8 +87,8 @@ pub const PublicKey = struct {
         em[em.len - msg.len - 1] = 0;
         @memcpy(em[em.len - msg.len ..][0..msg.len], msg);
 
-        const m = try Fe.fromBytes(pk.modulus, em, .big);
-        const e = try pk.modulus.powPublic(m, pk.public_exponent);
+        const m = try Fe.fromBytes(pk.n, em, .big);
+        const e = try pk.n.powPublic(m, pk.e);
         try e.toBytes(em, .big);
         return em;
     }
@@ -99,7 +102,7 @@ pub const PublicKey = struct {
         out: []u8,
     ) ![]const u8 {
         // align variable names with spec
-        const k = byteLen(pk.modulus.bits());
+        const k = byteLen(pk.n.bits());
         if (out.len < k) return error.BufferTooSmall;
 
         if (msg.len > k - 2 * Hash.digest_length - 2) return error.MessageTooLong;
@@ -126,43 +129,40 @@ pub const PublicKey = struct {
         const seed_mask = mgf1(Hash, db, mgf_buf[0..seed.len]);
         for (seed, seed_mask) |*v, m| v.* ^= m;
 
-        const m = try Fe.fromBytes(pk.modulus, em, .big);
-        const e = try pk.modulus.powPublic(m, pk.public_exponent);
+        const m = try Fe.fromBytes(pk.n, em, .big);
+        const e = try pk.n.powPublic(m, pk.e);
         try e.toBytes(em, .big);
         return em;
     }
 };
 
-pub fn byteLen(bits: usize) usize {
-    return std.math.divCeil(usize, bits, 8) catch unreachable;
-}
-
 pub const SecretKey = struct {
-    /// `d`
-    private_exponent: Fe,
+    public_key: PublicKey,
+    d: Fe,
+    primes: [2]Fe,
 
-    pub const FromBytesError = ValueError || ff.OverflowError || ff.FieldElementError;
+	// Precomputed contains precomputed values that speed up private
+	// operations, if available.
+    precomputed: ?PrecomputedValues = null,
 
-    pub fn fromBytes(n: Modulus, exp: []const u8) FromBytesError!SecretKey {
-        const d = try Fe.fromBytes(n, exp, .big);
-        if (std.debug.runtime_safety) {
-            // > The RSA private exponent d is a positive integer less than n
-            // > satisfying e * d == 1 (mod \lambda(n)),
-            if (!d.isOdd()) return error.Exponent;
-            if (d.v.compare(n.v) != .lt) return error.Exponent;
-        }
+    pub fn fromBytes(public: PublicKey, dbytes: []const u8, p: Fe, q: Fe) !SecretKey {
+        const d = try Fe.fromBytes(public.n, dbytes, .big);
 
-        return .{ .private_exponent = d };
+        // > The RSA private exponent d is a positive integer less than n
+        // > satisfying e * d == 1 (mod \lambda(n)),
+        if (!d.isOdd()) return error.Exponent;
+        if (d.v.compare(public.n.v) != .lt) return error.Exponent;
+
+        const primes = [2]Fe{p, q};
+        
+        return .{ 
+            .public_key = public, 
+            .d = d,
+            .primes = primes,
+        };
     }
-};
 
-pub const KeyPair = struct {
-    public: PublicKey,
-    secret: SecretKey,
-
-    pub const FromDerError = PublicKey.FromBytesError || SecretKey.FromBytesError || der.Parser.Error || error{ KeyMismatch, InvalidVersion };
-
-    pub fn fromDer(bytes: []const u8) FromDerError!KeyPair {
+    pub fn fromDer(bytes: []const u8) !SecretKey {
         var parser = der.Parser{ .bytes = bytes };
         const seq = try parser.expectSequence();
         const version = try parser.expectInt(u8);
@@ -172,7 +172,6 @@ pub const KeyPair = struct {
         const sec_exp = try parser.expectPrimitive(.integer);
 
         const public = try PublicKey.fromBytes(parser.view(mod), parser.view(pub_exp));
-        const secret = try SecretKey.fromBytes(public.modulus, parser.view(sec_exp));
 
         const prime1 = try parser.expectPrimitive(.integer);
         const prime2 = try parser.expectPrimitive(.integer);
@@ -199,46 +198,35 @@ pub const KeyPair = struct {
         try parser.expectEnd(seq.slice.end);
         try parser.expectEnd(bytes.len);
 
+        const p = try Fe.fromBytes(public.n, parser.view(prime1), .big);
+        const q = try Fe.fromBytes(public.n, parser.view(prime2), .big);
+
+        // check that n = p * q
+        const expected_zero = public.n.mul(p, q);
+        if (!expected_zero.isZero()) return error.KeyMismatch;
+
+        const dbytes = parser.view(sec_exp);
+
         if (std.debug.runtime_safety) {
-            const p = try Fe.fromBytes(public.modulus, parser.view(prime1), .big);
-            const q = try Fe.fromBytes(public.modulus, parser.view(prime2), .big);
-
-            // check that n = p * q
-            const expected_zero = public.modulus.mul(p, q);
-            if (!expected_zero.isZero()) return error.KeyMismatch;
-
             // TODO: check that d * e is one mod p-1 and mod q-1. Note d and e were bound
-            // const de = secret.private_exponent.mul(public.public_exponent);
-            // const one = public.modulus.one();
+            // const de = secret.d.mul(public.e);
+            // const one = public.n.one();
 
-            // if (public.modulus.mul(de, p).compare(one) != .eq) return error.KeyMismatch;
-            // if (public.modulus.mul(de, q).compare(one) != .eq) return error.KeyMismatch;
+            // if (public.n.mul(de, p).compare(one) != .eq) return error.KeyMismatch;
+            // if (public.n.mul(de, q).compare(one) != .eq) return error.KeyMismatch;
         }
 
-        return .{ .public = public, .secret = secret };
+        return try SecretKey.fromBytes(public, dbytes, p, q);
     }
 
-    /// Deprecated.
-    pub fn signPkcsv1_5(kp: KeyPair, comptime Hash: type, msg: []const u8, out: []u8) !PKCS1v1_5(Hash).Signature {
-        var st = try signerPkcsv1_5(kp, Hash);
-        st.update(msg);
-        return try st.finalize(out);
-    }
-
-    /// Deprecated.
-    pub fn signerPkcsv1_5(kp: KeyPair, comptime Hash: type) !PKCS1v1_5(Hash).Signer {
-        return PKCS1v1_5(Hash).Signer.init(kp);
-    }
-
-    /// Deprecated.
-    pub fn decryptPkcsv1_5(kp: KeyPair, ciphertext: []const u8, out: []u8) ![]const u8 {
-        const k = byteLen(kp.public.modulus.bits());
+    pub fn decryptPkcsv1_5(secret_key: SecretKey, ciphertext: []const u8, out: []u8) ![]const u8 {
+        const k = byteLen(secret_key.public_key.n.bits());
         if (out.len < k) return error.BufferTooSmall;
 
         const em = out[0..k];
 
-        const m = try Fe.fromBytes(kp.public.modulus, ciphertext, .big);
-        const e = try kp.public.modulus.pow(m, kp.secret.private_exponent);
+        const m = try Fe.fromBytes(secret_key.public_key.n, ciphertext, .big);
+        const e = try secret_key.public_key.n.pow(m, secret_key.d);
         try e.toBytes(em, .big);
 
         // Care shall be taken to ensure that an opponent cannot
@@ -253,36 +241,19 @@ pub const KeyPair = struct {
         return em[msg_start + 1 ..];
     }
 
-    pub fn signOaep(
-        kp: KeyPair,
-        comptime Hash: type,
-        msg: []const u8,
-        salt: ?[]const u8,
-        out: []u8,
-    ) !Pss(Hash).Signature {
-        var st = try signerOaep(kp, Hash, salt);
-        st.update(msg);
-        return try st.finalize(out);
-    }
-
-    /// Salt must outlive returned `PSS.Signer`.
-    pub fn signerOaep(kp: KeyPair, comptime Hash: type, salt: ?[]const u8) !Pss(Hash).Signer {
-        return Pss(Hash).Signer.init(kp, salt);
-    }
-
     pub fn decryptOaep(
-        kp: KeyPair,
+        secret_key: SecretKey,
         comptime Hash: type,
         ciphertext: []const u8,
         label: []const u8,
         out: []u8,
     ) ![]u8 {
         // align variable names with spec
-        const k = byteLen(kp.public.modulus.bits());
+        const k = byteLen(secret_key.public_key.n.bits());
         if (out.len < k) return error.BufferTooSmall;
 
-        const mod = try Fe.fromBytes(kp.public.modulus, ciphertext, .big);
-        const exp = kp.public.modulus.pow(mod, kp.secret.private_exponent) catch unreachable;
+        const mod = try Fe.fromBytes(secret_key.public_key.n, ciphertext, .big);
+        const exp = secret_key.public_key.n.pow(mod, secret_key.d) catch unreachable;
         const em = out[0..k];
         try exp.toBytes(em, .big);
 
@@ -312,16 +283,121 @@ pub const KeyPair = struct {
         return em[msg_start + 1 ..];
     }
 
-    /// Encrypt short plaintext with secret key.
-    pub fn encrypt(kp: KeyPair, plaintext: []const u8, out: []u8) !void {
-        const n = kp.public.modulus;
+    /// decrypt short plaintext with secret key.
+    pub fn decrypt(secret_key: SecretKey, plaintext: []const u8, out: []u8) !void {
+        const n = secret_key.public_key.n;
         const k = byteLen(n.bits());
-        if (plaintext.len > k) return error.MessageTooLong;
+        if (plaintext.len > k) {
+            return error.MessageTooLong;
+        }
 
         const msg_as_int = try Fe.fromBytes(n, plaintext, .big);
-        const enc_as_int = try n.pow(msg_as_int, kp.secret.private_exponent);
+        const enc_as_int = try n.pow(msg_as_int, secret_key.d);
         try enc_as_int.toBytes(out, .big);
     }
+
+    pub fn validate(secret_key: SecretKey) !void {
+        _ = secret_key;
+    }
+
+    // Precompute performs some calculations that speed up private key operations
+    // in the future.
+    pub fn precompute(secret_key: *SecretKey) !void {
+        if (secret_key.precomputed != null) {
+            return;
+        }
+
+        const big_one = Modulus.one();
+        const big_zero = Modulus.zero;
+
+        var dp = try Modulus.fromUint(secret_key.d).sub(secret_key.primes[0], big_one);
+        dp = try Modulus.fromUint(dp).add(secret_key.d, big_zero);
+
+        var dq = try Modulus.fromUint(secret_key.d).sub(secret_key.primes[1], big_one);
+        dq = try Modulus.fromUint(dq).add(secret_key.d, big_zero);
+
+        const qinv = Modulus.one();
+
+        const precomputed: PrecomputedValues = .{
+            .dp = dp,
+            .dq = dq,
+            .qinv = qinv,
+
+            .crt_values = [2]CRTValue{
+                .{
+                    .exp = Modulus.one(), 
+                    .coeff = Modulus.one(),
+                    .t = Modulus.one(),
+                },
+                .{
+                    .exp = Modulus.one(), 
+                    .coeff = Modulus.one(),
+                    .t = Modulus.one(),
+                },
+            },
+        };
+
+        secret_key.precomputed = precomputed;
+    }
+};
+
+pub const KeyPair = struct {
+    public_key: PublicKey,
+    secret_key: SecretKey,
+
+    /// Return the public key corresponding to the secret key.
+    pub fn fromSecretKey(secret_key: SecretKey) !KeyPair {
+        return .{ 
+            .secret_key = secret_key, 
+            .public_key = secret_key.public_key,
+        };
+    }
+
+    pub fn signPkcsv1_5(kp: KeyPair, comptime Hash: type, msg: []const u8, out: []u8) !PKCS1v1_5(Hash).Signature {
+        var st = try signerPkcsv1_5(kp, Hash);
+        st.update(msg);
+        return try st.finalize(out);
+    }
+
+    pub fn signerPkcsv1_5(kp: KeyPair, comptime Hash: type) !PKCS1v1_5(Hash).Signer {
+        return PKCS1v1_5(Hash).Signer.init(kp.secret_key);
+    }
+
+    pub fn signOaep(
+        kp: KeyPair,
+        comptime Hash: type,
+        msg: []const u8,
+        salt: ?[]const u8,
+        out: []u8, 
+    ) !Pss(Hash).Signature {
+        var st = try signerOaep(kp, Hash, salt);
+        st.update(msg);
+        return try st.finalize(out);
+    }
+
+    /// Salt must outlive returned `PSS.Signer`.
+    pub fn signerOaep(kp: KeyPair, comptime Hash: type, salt: ?[]const u8) !Pss(Hash).Signer {
+        return Pss(Hash).Signer.init(kp.secret_key, salt);
+    }
+
+};
+
+pub const PrecomputedValues = struct {
+	dp: Fe, // D mod (P-1)
+    dq: Fe, // D mod (Q-1)
+	qinv: Fe, // Q^-1 mod P
+
+	// CRTValues is used for the 3rd and subsequent primes. Due to a
+	// historical accident, the CRT for the first two primes is handled
+	// differently in PKCS #1 and interoperability is sufficiently
+	// important that we mirror this.
+    crt_values: [2]CRTValue,
+};
+
+pub const CRTValue = struct {
+	exp: Fe, // D mod (prime-1).
+	coeff: Fe, // R·Coeff ≡ 1 mod Prime.
+	r: Fe, // product of primes prior to this (inc p and q).
 };
 
 /// Deprecated.
@@ -333,8 +409,9 @@ pub const KeyPair = struct {
 pub fn PKCS1v1_5(comptime Hash: type) type {
     return struct {
         const PkcsT = @This();
+
         pub const Signature = struct {
-            bytes: []const u8,
+            bytes: []u8,
 
             const Self = @This();
 
@@ -347,16 +424,28 @@ pub fn PKCS1v1_5(comptime Hash: type) type {
                 st.update(msg);
                 return st.verify();
             }
+
+            /// Return the raw signature bytes.
+            pub fn toBytes(self: Self) []u8 {
+                return self.bytes;
+            }
+
+            /// Create a signature from a bytes.
+            pub fn fromBytes(bytes: []u8) Self {
+                return Signature{
+                    .bytes = bytes,
+                };
+            }
         };
 
         pub const Signer = struct {
             h: Hash,
-            key_pair: KeyPair,
+            secret_key: SecretKey,
 
-            pub fn init(key_pair: KeyPair) Signer {
+            pub fn init(secret_key: SecretKey) Signer {
                 return .{
                     .h = Hash.init(.{}),
-                    .key_pair = key_pair,
+                    .secret_key = secret_key,
                 };
             }
 
@@ -365,27 +454,28 @@ pub fn PKCS1v1_5(comptime Hash: type) type {
             }
 
             pub fn finalize(self: *Signer, out: []u8) !PkcsT.Signature {
-                const k = byteLen(self.key_pair.public.modulus.bits());
-                if (out.len < k) return error.BufferTooSmall;
+                const k = byteLen(self.secret_key.public_key.n.bits());
 
                 var hash: [Hash.digest_length]u8 = undefined;
                 self.h.final(&hash);
 
                 const em = try emsaEncode(hash, out[0..k]);
-                try self.key_pair.encrypt(em, em);
-                return .{ .bytes = em };
+
+                try self.secret_key.decrypt(em, em);
+
+                return Signature.fromBytes(em);
             }
         };
 
         pub const Verifier = struct {
             h: Hash,
-            sig: PkcsT.Signature,
+            sig: []u8,
             public_key: PublicKey,
 
             fn init(sig: PkcsT.Signature, public_key: PublicKey) Verifier {
                 return Verifier{
                     .h = Hash.init(.{}),
-                    .sig = sig,
+                    .sig = sig.bytes,
                     .public_key = public_key,
                 };
             }
@@ -396,23 +486,23 @@ pub fn PKCS1v1_5(comptime Hash: type) type {
 
             pub fn verify(self: *Verifier) !void {
                 const pk = self.public_key;
-                const s = try Fe.fromBytes(pk.modulus, self.sig.bytes, .big);
-                const emm = try pk.modulus.powPublic(s, pk.public_exponent);
+                const s = try Fe.fromBytes(pk.n, self.sig, .big);
+                const emm = try pk.n.powPublic(s, pk.e);
 
                 var em_buf: [max_modulus_len]u8 = undefined;
-                const em = em_buf[0..byteLen(pk.modulus.bits())];
+                const em = em_buf[0..byteLen(pk.n.bits())];
                 try emm.toBytes(em, .big);
 
                 var hash: [Hash.digest_length]u8 = undefined;
                 self.h.final(&hash);
 
-                // TODO: compare hash values instead of emsa values
                 var em_buf2: [max_modulus_len]u8 = undefined;
-                const em2 = em_buf2[0..byteLen(pk.modulus.bits())];
-                try emm.toBytes(em2, .big);
+                const em2 = em_buf2[0..byteLen(pk.n.bits())];
                 const expected = try emsaEncode(hash, em2);
 
-                if (!std.mem.eql(u8, expected, em)) return error.Inconsistent;
+                if (!std.mem.eql(u8, expected, em)) {
+                    return error.Inconsistent;
+                }
             }
         };
 
@@ -481,7 +571,7 @@ pub fn Pss(comptime Hash: type) type {
     const default_salt_len = Hash.digest_length;
     return struct {
         pub const Signature = struct {
-            bytes: []const u8,
+            bytes: []u8,
 
             const Self = @This();
 
@@ -494,19 +584,31 @@ pub fn Pss(comptime Hash: type) type {
                 st.update(msg);
                 return st.verify();
             }
+
+            /// Return the raw signature bytes.
+            pub fn toBytes(self: Self) []u8 {
+                return self.bytes;
+            }
+
+            /// Create a signature from a bytes.
+            pub fn fromBytes(bytes: []u8) Self {
+                return Signature{
+                    .bytes = bytes,
+                };
+            }
         };
 
         const PssT = @This();
 
         pub const Signer = struct {
             h: Hash,
-            key_pair: KeyPair,
+            secret_key: SecretKey,
             salt: ?[]const u8,
 
-            pub fn init(key_pair: KeyPair, salt: ?[]const u8) Signer {
+            pub fn init(secret_key: SecretKey, salt: ?[]const u8) Signer {
                 return .{
                     .h = Hash.init(.{}),
-                    .key_pair = key_pair,
+                    .secret_key = secret_key,
                     .salt = salt,
                 };
             }
@@ -525,10 +627,10 @@ pub fn Pss(comptime Hash: type) type {
                     break :brk &res;
                 };
 
-                const em_bits = self.key_pair.public.modulus.bits() - 1;
+                const em_bits = self.secret_key.public_key.n.bits() - 1;
                 const em = try emsaPSSEncode(hashed, salt, em_bits, out);
 
-                try self.key_pair.encrypt(em, em);
+                try self.secret_key.decrypt(em, em);
 
                 return .{ .bytes = em };
             }
@@ -536,14 +638,14 @@ pub fn Pss(comptime Hash: type) type {
 
         pub const Verifier = struct {
             h: Hash,
-            sig: PssT.Signature,
+            sig: []u8,
             public_key: PublicKey,
             salt_len: usize,
 
             fn init(sig: PssT.Signature, public_key: PublicKey, salt_len: usize) Verifier {
                 return Verifier{
                     .h = Hash.init(.{}),
-                    .sig = sig,
+                    .sig = sig.bytes,
                     .public_key = public_key,
                     .salt_len = salt_len,
                 };
@@ -557,18 +659,18 @@ pub fn Pss(comptime Hash: type) type {
                 const pk = self.public_key;
 
                 var em_buf: [max_modulus_len]u8 = undefined;
-                const em_bits = pk.modulus.bits() - 1;
+                const em_bits = pk.n.bits() - 1;
                 const em_len = std.math.divCeil(usize, em_bits, 8) catch unreachable;
                 const em = em_buf[0..em_len];
 
-                const s = try Fe.fromBytes(pk.modulus, self.sig.bytes, .big);
-                const emm = try pk.modulus.powPublic(s, pk.public_exponent);
+                const s = try Fe.fromBytes(pk.n, self.sig, .big);
+                const emm = try pk.n.powPublic(s, pk.e);
                 try emm.toBytes(em, .big);
 
                 var mHash: [Hash.digest_length]u8 = undefined;
                 self.h.final(&mHash);
 
-                const mod_bits = self.public_key.modulus.bits();
+                const mod_bits = self.public_key.n.bits();
                 try emsaPSSVerify(&mHash, em, mod_bits - 1, self.salt_len);
             }
         };
@@ -603,7 +705,8 @@ pub fn Pss(comptime Hash: type) type {
             var mgf_buf: [max_modulus_len]u8 = undefined;
             const mgf_len = em_len - Hash.digest_length - 1;
             const mgf_out = mgf_buf[0 .. ((mgf_len - 1) / Hash.digest_length + 1) * Hash.digest_length];
-            const dbMask = try MGF1(mgf_out, hash, mgf_len);
+            var dbMask = mgf1(Hash, hash, mgf_out);
+            dbMask = dbMask[0..mgf_len];
 
             var i: usize = 0;
             while (i < dbMask.len) : (i += 1) {
@@ -678,7 +781,8 @@ pub fn Pss(comptime Hash: type) type {
             }
 
             const mgf_out = mgf_out_buf[0 .. ((mgf_len - 1) / Hash.digest_length + 1) * Hash.digest_length];
-            var dbMask = try MGF1(mgf_out, h, mgf_len);
+            var dbMask = mgf1(Hash, h, mgf_out);
+            dbMask = dbMask[0..mgf_len];
 
             // 8.   Let DB = maskedDB \xor dbMask.
             i = 0;
@@ -740,22 +844,11 @@ pub fn Pss(comptime Hash: type) type {
                 return error.InvalidSignature;
             }
         }
-
-        fn MGF1(out: []u8, seed: *const [Hash.digest_length]u8, len: usize) ![]u8 {
-            var counter: u32 = 0;
-            var idx: usize = 0;
-            var hash = seed.* ++ @as([4]u8, undefined);
-
-            while (idx < len) {
-                std.mem.writeInt(u32, hash[seed.len..][0..4], counter, .big);
-                Hash.hash(&hash, out[idx..][0..Hash.digest_length], .{});
-                idx += Hash.digest_length;
-                counter += 1;
-            }
-
-            return out[0..len];
-        }
     };
+}
+
+pub fn byteLen(bits: usize) usize {
+    return std.math.divCeil(usize, bits, 8) catch unreachable;
 }
 
 /// Mask generation function. Currently the only one defined.
@@ -953,8 +1046,12 @@ test hexToBytes {
 const TestHash = std.crypto.hash.sha2.Sha256;
 fn testKeypair() !KeyPair {
     const keypair_bytes = @embedFile("testdata/id_rsa.der");
-    const kp = try KeyPair.fromDer(keypair_bytes);
-    try std.testing.expectEqual(2048, kp.public.modulus.bits());
+
+    const sk = try SecretKey.fromDer(keypair_bytes);
+    const kp = try KeyPair.fromSecretKey(sk);
+
+    try std.testing.expectEqual(2048, kp.public_key.n.bits());
+
     return kp;
 }
 
@@ -963,12 +1060,24 @@ test "rsa PKCS1-v1_5 encrypt and decrypt" {
 
     const msg = "rsa PKCS1-v1_5 encrypt and decrypt";
     var out: [max_modulus_len]u8 = undefined;
-    const enc = try kp.public.encryptPkcsv1_5(msg, &out);
+    const enc = try kp.public_key.encryptPkcsv1_5(msg, &out);
 
     var out2: [max_modulus_len]u8 = undefined;
-    const dec = try kp.decryptPkcsv1_5(enc, &out2);
+    const dec = try kp.secret_key.decryptPkcsv1_5(enc, &out2);
 
     try std.testing.expectEqualSlices(u8, msg, dec);
+
+    // ==========
+
+    const check2 = "907052e0ee7f8f92990751c3432c73a3450a7dece61ba1876169875dc9b28b4aa40699c8377141ed021a92c1ab623d734e8cf1010814eb7fc26321c7b037cc467c0f2b9029c4fc082387c7dedb718dda3251b3b2a7f06871d446be2df051e2013d3726af7002a5e487559cf36ea6a11bacdfb12dc35cc9285bfed8906fac3c0c8a1a69bbdc8f834e5f1a766e13792dcc202bf48e7eb6aca78f8df4904b59d2d09b5eaaf58903217b1d0d21fb66e5e44836b422500a2c9d5e0f37232544dc32a0d1ec33e32c4b113057441097f936a6e7b4f49be6b7fb7240b0f982aee9b3fde4708fb7dfe365b9576bcd0fd0120a50658c76c2e0361b82fbf60a423b363dd354";
+    var enc2: [256]u8 = undefined;
+    const enc2_res = try fmt.hexToBytes(&enc2, check2);
+
+    var out22: [max_modulus_len]u8 = undefined;
+    const dec2 = try kp.secret_key.decryptPkcsv1_5(enc2_res, &out22);
+
+    try std.testing.expectEqualSlices(u8, msg, dec2);
+
 }
 
 test "rsa OAEP encrypt and decrypt" {
@@ -977,12 +1086,24 @@ test "rsa OAEP encrypt and decrypt" {
     const msg = "rsa OAEP encrypt and decrypt";
     const label = "";
     var out: [max_modulus_len]u8 = undefined;
-    const enc = try kp.public.encryptOaep(TestHash, msg, label, &out);
+    const enc = try kp.public_key.encryptOaep(TestHash, msg, label, &out);
 
     var out2: [max_modulus_len]u8 = undefined;
-    const dec = try kp.decryptOaep(TestHash, enc, label, &out2);
+    const dec = try kp.secret_key.decryptOaep(TestHash, enc, label, &out2);
 
     try std.testing.expectEqualSlices(u8, msg, dec);
+
+    // ==========
+
+    const check2 = "76d93565b187e15d2b94b5c1ef9b715edde4c26a90e3045ada5ddad49718761ecd9dacc67ec4136d4b3ca9d236a0cd595bc6a14adde39bc4b75efbab0daa980d1525efd87ce526c66f9e225ddfdb85a2cffcf05bdd9ddff9a82f8a269339287cdac42a6a54580c6d2d7bcd07b332e304208e6f122c13f154abd56557eeb00b31a58df79ffec019dbe8681f4fe819c96fa4e030bdb63203c45ab9458d12660158bb9b0ef1a0c35a9954a73f89e59819fe7f2612d5728d863ce2d1e551a3da1fcc3e8f42c31e7da7918ff0ea9ed4b4e63e60ff066132b846ba9642d5ca9394fe99bf5bca1ce28ffcb81e54da28bced0eb85d046c7ccf150b2a3492b79abe72dd02";
+    var enc2: [256]u8 = undefined;
+    const enc2_res = try fmt.hexToBytes(&enc2, check2);
+
+    var out22: [max_modulus_len]u8 = undefined;
+    const dec2 = try kp.secret_key.decryptOaep(TestHash, enc2_res, label, &out22);
+
+    try std.testing.expectEqualSlices(u8, msg, dec2);
+
 }
 
 test "rsa PKCS1-v1_5 signature" {
@@ -992,7 +1113,34 @@ test "rsa PKCS1-v1_5 signature" {
     var out: [max_modulus_len]u8 = undefined;
 
     const signature = try kp.signPkcsv1_5(TestHash, msg, &out);
-    try signature.verify(msg, kp.public);
+    try signature.verify(msg, kp.public_key);
+
+    // ==========
+
+    const check2 = "2ad0059bbd6d7e90c4c6e570611548e9125f6e36e94a0b331015aa960976b237f07ca880a44e52efb9d8aba96e63838f73d0aef9c18d9bf0728ece0bc94833bbfbb9cd57a9cca2133ce6eb872cb7f3747ffa89e94634ab589085f6a113c8e31a149ff6177d91d98f5e1af91ba3a4e4e9339d5bf50474f0c18483d0ee8ac1079a1dac9408e00a64907a9a43bce4273a5573c9f0d4814f0271eec465791f500b33ac1059899ee0ee643a3b9b6abe0980675dd8a3be26d61bef3f11f5ab5e9129276f6a8ddb9be958b3ea6413e38d79a5e9c025c0b488b8e4234b3d0807da36eb82d2c19f9fd95a71a4aff2f5219ba0e3b0df994c3129204d0e9c48d1e47bfb2edd";
+    var sig2: [256]u8 = undefined;
+    const sig2_res = try fmt.hexToBytes(&sig2, check2);
+
+    const signature2 = PKCS1v1_5(TestHash).Signature.fromBytes(sig2_res);
+    try signature2.verify(msg, kp.public_key);
+}
+
+test "rsa PKCS1-v1_5 signature fail" {
+    const kp = try testKeypair();
+
+    const msg = "rsa PKCS1-v1_5 signature";
+
+    const check2 = "3ad0059bbd6d7e90c4c6e570611548e9125f6e36e94a0b331015aa960976b237f07ca880a44e52efb9d8aba96e63838f73d0aef9c18d9bf0728ece0bc94833bbfbb9cd57a9cca2133ce6eb872cb7f3747ffa89e94634ab589085f6a113c8e31a149ff6177d91d98f5e1af91ba3a4e4e9339d5bf50474f0c18483d0ee8ac1079a1dac9408e00a64907a9a43bce4273a5573c9f0d4814f0271eec465791f500b33ac1059899ee0ee643a3b9b6abe0980675dd8a3be26d61bef3f11f5ab5e9129276f6a8ddb9be958b3ea6413e38d79a5e9c025c0b488b8e4234b3d0807da36eb82d2c19f9fd95a71a4aff2f5219ba0e3b0df994c3129204d0e9c48d1e47bfb2edd";
+    var sig2: [256]u8 = undefined;
+    const sig2_res = try fmt.hexToBytes(&sig2, check2);
+
+    const signature2 = PKCS1v1_5(TestHash).Signature.fromBytes(sig2_res);
+
+    var need_true: bool = false;
+    _ = signature2.verify(msg, kp.public_key) catch {
+        need_true = true;
+    };
+    try testing.expectEqual(true, need_true);
 }
 
 test "rsa PSS signature" {
@@ -1004,9 +1152,19 @@ test "rsa PSS signature" {
     const salts = [_][]const u8{ "asdf", "" };
     for (salts) |salt| {
         const signature = try kp.signOaep(TestHash, msg, salt, &out);
-        try signature.verify(msg, kp.public, salt.len);
+        try signature.verify(msg, kp.public_key, salt.len);
     }
 
     const signature = try kp.signOaep(TestHash, msg, null, &out); // random salt
-    try signature.verify(msg, kp.public, null);
+    try signature.verify(msg, kp.public_key, null);
+
+    // ==========
+
+    const check2 = "6ae741a696a9eb8e79139ad9f8def16b4314fcda2cbca108d70e8555f5b2cbee2adc65bb91ec334e817108914d04cdcb8dd915dabfe5f2fb591e72c26553085e9731ccffa682539230bde35b4f43284be424a2f6b5f424649e2624454c3f9d93518f7d6fde6288962a50aace7f826d85ec23de2c2c6ddb470a20a4ad21c6f39c838a28a062d4359ffa00de3170ec018118bcd5e7ec6c6f658d1373caf0d1fdf4671058c2a67cfeb8b673188d34a28d9b0741e21ed5ef2ab7863b817271441ea4373601cb1064e654f9b88b4f9b83d9754fee19bf5e1924da49caafd34aafcbde9cd8d16ec5282e8f3abab2817664f6a4ff5f18e4d77c5a7f80df9f5538fd8c53";
+    var sig2: [256]u8 = undefined;
+    const sig2_res = try fmt.hexToBytes(&sig2, check2);
+
+    const signature2 = Pss(TestHash).Signature.fromBytes(sig2_res);
+    try signature2.verify(msg, kp.public_key, null);
+
 }
