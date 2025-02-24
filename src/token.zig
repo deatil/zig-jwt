@@ -106,9 +106,25 @@ pub const Token = struct {
         return self.raw;
     }
 
-    pub fn getRawNoSignature(self: *Self) []const u8 {
-        const index = std.mem.lastIndexOf(u8, self.raw, ".") orelse self.raw.len;
-        return self.raw[0..index];
+    pub fn getRawNoSignature(self: *Self) ![]const u8 {
+        const count = std.mem.count(u8, self.raw, ".");
+        if (count <= 1) {
+            return self.raw;
+        }
+
+        var header: []const u8 = "";
+        var claims: []const u8 = "";
+
+        var it = std.mem.splitScalar(u8, self.raw, '.');
+        if (it.next()) |pair| {
+            header = pair;
+        }
+        if (it.next()) |pair| {
+            claims = pair;
+        }
+
+        const signature = try std.mem.joinZ(self.alloc, ".", &.{header, claims});
+        return signature;
     }
 
     pub fn getHeader(self: *Self) !Header {
@@ -339,7 +355,7 @@ test "Token" {
     const token51 = token3.getRaw();
     try testing.expectEqualStrings(check2, token51);
 
-    const token5 = token3.getRawNoSignature();
+    const token5 = try token3.getRawNoSignature();
     try testing.expectEqualStrings(check1, token5);
 
     // ====================
@@ -352,7 +368,7 @@ test "Token" {
     const sig61 = token6.getRaw();
     try testing.expectEqualStrings(check3, sig61);
 
-    const sig6 = token6.getRawNoSignature();
+    const sig6 = try token6.getRawNoSignature();
     try testing.expectEqualStrings(check3, sig6);
 
 }
