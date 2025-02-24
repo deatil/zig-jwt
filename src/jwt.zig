@@ -56,12 +56,28 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
             };
         }
 
+        pub fn alg(self: Self) []const u8 {
+            return self.signer.alg();
+        }
+
+        pub fn signLength(self: Self) isize {
+            return self.signer.signLength();
+        }
+
+        // use SigningMethod to make token
         pub fn sign(self: Self, claims: anytype, secret_key: SecretKeyType) ![]const u8 {
-            var t = token.Token.init(self.alloc);
-            try t.setHeader(.{
+            const header = .{
                 .typ = "JWT",
                 .alg = self.signer.alg(),
-            });
+            };
+
+            return try self.signWithHeader(header, claims, secret_key);
+        }
+
+        // use SigningMethod with header to make token
+        pub fn signWithHeader(self: Self, header: anytype, claims: anytype, secret_key: SecretKeyType) ![]const u8 {
+            var t = token.Token.init(self.alloc);
+            try t.setHeader(header);
             try t.setClaims(claims);
 
             const signing_string = try t.signingString();
@@ -76,6 +92,7 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
             return signed_token;
         }
 
+        // parse token and verify token signature
         pub fn parse(self: Self, token_string: []const u8, public_key: PublicKeyType) !token.Token {
             var t = token.Token.init(self.alloc);
             try t.parse(token_string);
@@ -242,6 +259,49 @@ test "parse JWTSignatureInvalid" {
         try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
+
+}
+
+test "SigningMethodEdDSA signWithHeader" {
+    const alloc = std.heap.page_allocator;
+
+    const kp = eddsa.Ed25519.KeyPair.generate();
+
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+
+    const s = SigningMethodEdDSA.init(alloc);
+
+    const header = .{
+        .typ = "JWT",
+        .alg = s.alg(),
+        .tuy = "data123",
+    };
+
+    const token_string = try s.signWithHeader(header, claims, kp.secret_key);
+    try testing.expectEqual(true, token_string.len > 0);
+    try testing.expectEqualStrings("EdDSA", header.alg);
+
+    // ==========
+
+    const p = SigningMethodEdDSA.init(alloc);
+    var parsed = try p.parse(token_string, kp.public_key);
+
+    const header2 = try parsed.getHeaderValue();
+    try testing.expectEqualStrings(header.typ, header2.object.get("typ").?.string);
+    try testing.expectEqualStrings(header.alg, header2.object.get("alg").?.string);
+    try testing.expectEqualStrings(header.tuy, header2.object.get("tuy").?.string);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
+
+    // ==========
+
+    try testing.expectEqual(64, s.signLength());
+    try testing.expectEqualStrings("EdDSA", s.alg());
 
 }
 
