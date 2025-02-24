@@ -56,7 +56,7 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
             };
         }
 
-        pub fn sign(self: Self, claims: anytype, key: SecretKeyType) ![]const u8 {
+        pub fn sign(self: Self, claims: anytype, secret_key: SecretKeyType) ![]const u8 {
             var t = token.Token.init(self.alloc);
             try t.setHeader(.{
                 .typ = "JWT",
@@ -64,19 +64,19 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
             });
             try t.setClaims(claims);
 
-            const signed = try t.signingString();
+            const signing_string = try t.signingString();
             defer t.deinit();
 
-            const signed_string = try self.signer.sign(signed, key);
-            t.withSignature(signed_string);
+            const signature = try self.signer.sign(signing_string, secret_key);
+            t.withSignature(signature);
 
-            defer self.alloc.free(signed_string);
+            defer self.alloc.free(signature);
 
-            const sig = try t.signedString();
-            return sig;
+            const signed_token = try t.signedString();
+            return signed_token;
         }
 
-        pub fn parse(self: Self, token_string: []const u8, key: PublicKeyType) !token.Token {
+        pub fn parse(self: Self, token_string: []const u8, public_key: PublicKeyType) !token.Token {
             var t = token.Token.init(self.alloc);
             try t.parse(token_string);
 
@@ -88,15 +88,15 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
                 return Error.JWTAlgoInvalid;
             }
 
-            const token_sign = t.getSignature();
+            const signature = t.getSignature();
     
-            const signed = try self.alloc.alloc(u8, token_sign.len);
-            @memcpy(signed[0..], token_sign[0..]);
+            const token_sign = try self.alloc.alloc(u8, signature.len);
+            @memcpy(token_sign[0..], signature[0..]);
 
-            defer self.alloc.free(signed);
+            defer self.alloc.free(token_sign);
 
-            const msg = try t.signingString();
-            if (!self.signer.verify(msg, signed, key)) {
+            const signing_string = try t.signingString();
+            if (!self.signer.verify(signing_string, token_sign, public_key)) {
                 return Error.JWTVerifyFail;
             }
 

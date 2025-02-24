@@ -1,11 +1,27 @@
 ## Zig-jwt 
 
-A JWT library for zig.
+A JWT (JSON Web Token) library for zig.
 
 
 ### Env
 
  - Zig >= 0.14.0-dev.2851+b074fb7dd
+
+
+### What the heck is a JWT?
+
+JWT.io has [a great introduction](https://jwt.io/introduction) to JSON Web Tokens.
+
+In short, it's a signed JSON object that does something useful (for example, authentication).  It's commonly used for `Bearer` tokens in Oauth 2.  A token is made of three parts, separated by `.`'s.  The first two parts are JSON objects, that have been [base64url](https://datatracker.ietf.org/doc/html/rfc4648) encoded.  The last part is the signature, encoded the same way.
+
+The first part is called the header.  It contains the necessary information for verifying the last part, the signature.  For example, which encryption method was used for signing and what key was used.
+
+The part in the middle is the interesting bit.  It's called the Claims and contains the actual stuff you care about.  Refer to [RFC 7519](https://datatracker.ietf.org/doc/html/rfc7519) for information about reserved keys and the proper way to add your own.
+
+
+### What's in the box?
+
+This library supports the parsing and verification as well as the generation and signing of JWTs.  Current supported signing algorithms are HMAC SHA, RSA, RSA-PSS, and ECDSA, though hooks are present for adding your own.
 
 
 ### Adding zig-jwt as a dependency
@@ -100,6 +116,45 @@ The JWT library have signing methods:
  - `HS512`: jwt.SigningMethodHS512
 
  - `none`: jwt.SigningMethodNone
+
+
+### Sign PublicKey
+
+RSA PublicKey:
+~~~zig
+const secret_key = jwt.crypto_rsa.SecretKey;
+const public_key = jwt.crypto_rsa.PublicKey;
+
+// rsa no generate
+~~~
+
+ECDSA PublicKey:
+~~~zig
+const ecdsa = std.crypto.sign.ecdsa;
+
+const p256_secret_key = ecdsa.EcdsaP256Sha256.SecretKey;
+const p256_public_key = ecdsa.EcdsaP256Sha256.PublicKey;
+
+const p384_secret_key = ecdsa.EcdsaP384Sha384.SecretKey;
+const p384_public_key = ecdsa.EcdsaP384Sha384.PublicKey;
+
+// generate p256 public key
+const p256_kp = ecdsa.EcdsaP256Sha256.KeyPair.generate();
+
+// generate p384 public key
+const p384_kp = ecdsa.EcdsaP384Sha384.KeyPair.generate();
+~~~
+
+EdDSA PublicKey:
+~~~zig
+const Ed25519 = std.crypto.sign.Ed25519;
+
+const secret_key = Ed25519.SecretKey;
+const public_key = Ed25519.PublicKey;
+
+// generate public key
+const kp = Ed25519.KeyPair.generate();
+~~~
 
 
 ### LICENSE
