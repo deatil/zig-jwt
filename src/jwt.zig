@@ -1,18 +1,21 @@
 const std = @import("std");
 const fmt = std.fmt;
+const time = std.time;
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 
 pub const crypto_rsa = @import("rsa/rsa.zig");
 
-pub const token = @import("token.zig");
-pub const utils = @import("utils.zig");
 pub const rsa = @import("rsa.zig");
 pub const rsa_pss = @import("rsa_pss.zig");
 pub const ecdsa = @import("ecdsa.zig");
 pub const eddsa = @import("eddsa.zig");
 pub const hmac = @import("hmac.zig");
 pub const none = @import("none.zig");
+pub const utils = @import("utils.zig");
+
+pub const Token = @import("token.zig").Token;
+pub const Validator = @import("validator.zig").Validator;
 
 pub const SigningMethodRS256 = JWT(rsa.SigningRS256, crypto_rsa.SecretKey, crypto_rsa.PublicKey);
 pub const SigningMethodRS384 = JWT(rsa.SigningRS384, crypto_rsa.SecretKey, crypto_rsa.PublicKey);
@@ -76,7 +79,7 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
 
         // use SigningMethod with header to make token
         pub fn signWithHeader(self: Self, header: anytype, claims: anytype, secret_key: SecretKeyType) ![]const u8 {
-            var t = token.Token.init(self.alloc);
+            var t = Token.init(self.alloc);
             try t.setHeader(header);
             try t.setClaims(claims);
 
@@ -93,8 +96,8 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
         }
 
         // parse token and verify token signature
-        pub fn parse(self: Self, token_string: []const u8, public_key: PublicKeyType) !token.Token {
-            var t = token.Token.init(self.alloc);
+        pub fn parse(self: Self, token_string: []const u8, public_key: PublicKeyType) !Token {
+            var t = Token.init(self.alloc);
             try t.parse(token_string);
 
             const header = try t.getHeader();
@@ -189,8 +192,8 @@ pub fn getSigningMethod(name: []const u8) !type {
     return Error.JWTSigningMethodNotExists;
 }
 
-pub fn getTokenHeader(alloc: Allocator, token_string: []const u8) !token.Token.Header {
-    var t = token.Token.init(alloc);
+pub fn getTokenHeader(alloc: Allocator, token_string: []const u8) !Token.Header {
+    var t = Token.init(alloc);
     try t.parse(token_string);
 
     const header = try t.getHeader();
@@ -260,6 +263,29 @@ test "parse JWTSignatureInvalid" {
     };
     try testing.expectEqual(true, need_true);
 
+}
+
+test "Token Validator" {
+    const alloc = std.heap.page_allocator;
+
+    const check1 = "eyJ0eXAiOiJKV0UiLCJhbGciOiJFUzI1NiIsImtpZCI6ImtpZHMifQ.eyJpc3MiOiJpc3MiLCJpYXQiOjE1Njc4NDIzODgsImV4cCI6MTc2Nzg0MjM4OCwiYXVkIjoiZXhhbXBsZS5jb20iLCJzdWIiOiJzdWIiLCJqdGkiOiJqdGkgcnJyIiwibmJmIjoxNTY3ODQyMzg4fQ.dGVzdC1zaWduYXR1cmU";
+    const now = time.timestamp();
+
+    var token = Token.init(alloc);
+    try token.parse(check1);
+
+    var validator = try Validator.init(token);
+    defer validator.deinit();
+
+    try testing.expectEqual(true, validator.hasBeenIssuedBy("iss"));
+    try testing.expectEqual(true, validator.isRelatedTo("sub"));
+    try testing.expectEqual(true, validator.isIdentifiedBy("jti rrr"));
+    try testing.expectEqual(true, validator.isPermittedFor("example.com"));
+    try testing.expectEqual(true, validator.hasBeenIssuedBefore(now));
+
+    const claims = try token.getClaims();
+    try testing.expectEqual(true, claims.object.get("nbf").?.integer > 0);
+    
 }
 
 test "SigningMethodEdDSA signWithHeader" {

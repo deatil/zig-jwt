@@ -93,6 +93,39 @@ pub fn main() !void {
 ~~~
 
 
+### Token Validator
+
+~~~zig
+const std = @import("std");
+const jwt = @import("zig-jwt");
+
+pub fn main() !void {
+    const alloc = std.heap.page_allocator;
+
+    const token_string = "eyJ0eXAiOiJKV0UiLCJhbGciOiJFUzI1NiIsImtpZCI6ImtpZHMifQ.eyJpc3MiOiJpc3MiLCJpYXQiOjE1Njc4NDIzODgsImV4cCI6MTc2Nzg0MjM4OCwiYXVkIjoiZXhhbXBsZS5jb20iLCJzdWIiOiJzdWIiLCJqdGkiOiJqdGkgcnJyIiwibmJmIjoxNTY3ODQyMzg4fQ.dGVzdC1zaWduYXR1cmU";
+
+    var token = jwt.Token.init(alloc);
+    try token.parse(token_string);
+
+    var validator = try jwt.Validator.init(token);
+    defer validator.deinit();
+
+    // output: 
+    // hasBeenIssuedBy: true
+    std.debug.print("hasBeenIssuedBy: {} \n", .{validator.hasBeenIssuedBy("iss")});
+
+    // have functions:
+    // validator.hasBeenIssuedBy("iss")
+    // validator.isRelatedTo("sub")
+    // validator.isIdentifiedBy("jti rrr")
+    // validator.isPermittedFor("example.com") // audience
+    // validator.hasBeenIssuedBefore(now) // now is time timestamp
+    // validator.isMinimumTimeBefore(now)
+    // validator.isExpired(now)
+}
+~~~
+
+
 ### Signing Methods
 
 The JWT library have signing methods:
