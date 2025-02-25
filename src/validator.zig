@@ -9,6 +9,7 @@ const Token = @import("token.zig").Token;
 pub const Validator = struct {
     token: Token,
     claims: json.Value,
+    leeway: i64 = 0,
 
     const Self = @This();
 
@@ -19,11 +20,16 @@ pub const Validator = struct {
         return .{
             .token = token,
             .claims = claims,
+            .leeway = 0,
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.token.deinit();
+    }
+
+    pub fn withLeeway(self: *Self, leeway: i64) void {
+        self.leeway = leeway;
     }
 
     pub fn isPermittedFor(self: *Self, audience: []const u8) bool {
@@ -95,7 +101,7 @@ pub const Validator = struct {
 
         if (claims.object.get("iat")) |val| {
             if (val == .integer) {
-                if (now > val.integer) {
+                if (now + self.leeway >= val.integer) {
                     return true;
                 }
             }
@@ -111,7 +117,7 @@ pub const Validator = struct {
 
         if (claims.object.get("nbf")) |val| {
             if (val == .integer) {
-                if (now > val.integer) {
+                if (now + self.leeway >= val.integer) {
                     return true;
                 }
             }
@@ -127,7 +133,7 @@ pub const Validator = struct {
 
         if (claims.object.get("exp")) |val| {
             if (val == .integer) {
-                if (now <= val.integer) {
+                if (now - self.leeway < val.integer) {
                     return false;
                 }
             }
@@ -199,8 +205,34 @@ test "Validator" {
     try testing.expectEqual(true, validator.isIdentifiedBy("jti rrr"));
     try testing.expectEqual(true, validator.isPermittedFor("example.com"));
     try testing.expectEqual(true, validator.hasBeenIssuedBefore(now));
+    try testing.expectEqual(false, validator.isExpired(now));
 
     const claims = try token.getClaims();
     try testing.expectEqual(true, claims.object.get("nbf").?.integer > 0);
+
+    try testing.expectEqual(1567842388, claims.object.get("iat").?.integer);
+    try testing.expectEqual(1767842388, claims.object.get("exp").?.integer);
+    try testing.expectEqual(1567842388, claims.object.get("nbf").?.integer);
     
+    try testing.expectEqual(true, validator.hasBeenIssuedBefore(1567842389));
+    try testing.expectEqual(true, validator.isMinimumTimeBefore(1567842389));
+    try testing.expectEqual(true, validator.isExpired(1767842389));
+
+    // ======
+
+    var token2 = Token.init(alloc);
+    try token2.parse(check1);
+
+    var validator2 = try Validator.init(token2);
+    defer validator2.deinit();
+
+    validator2.withLeeway(3);
+
+    try testing.expectEqual(true, validator2.hasBeenIssuedBefore(1567842391));
+    try testing.expectEqual(false, validator2.hasBeenIssuedBefore(1567842384));
+    try testing.expectEqual(true, validator2.isMinimumTimeBefore(1567842391));
+    try testing.expectEqual(false, validator2.isMinimumTimeBefore(1567842384));
+    try testing.expectEqual(true, validator2.isExpired(1767842392));
+    try testing.expectEqual(false, validator2.isExpired(1767842389));
+
 }

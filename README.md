@@ -110,6 +110,8 @@ pub fn main() !void {
     var validator = try jwt.Validator.init(token);
     defer validator.deinit();
 
+    // validator.withLeeway(3);
+
     // output: 
     // hasBeenIssuedBy: true
     std.debug.print("hasBeenIssuedBy: {} \n", .{validator.hasBeenIssuedBy("iss")});
@@ -140,6 +142,8 @@ The JWT library have signing methods:
 
  - `ES256`: jwt.SigningMethodES256
  - `ES384`: jwt.SigningMethodES384
+
+ - `ES256K`: jwt.SigningMethodES256K
  
  - `EdDSA`: jwt.SigningMethodEdDSA
  - `ED25519`: jwt.SigningMethodED25519
@@ -171,11 +175,17 @@ const p256_public_key = ecdsa.EcdsaP256Sha256.PublicKey;
 const p384_secret_key = ecdsa.EcdsaP384Sha384.SecretKey;
 const p384_public_key = ecdsa.EcdsaP384Sha384.PublicKey;
 
+const p256k_secret_key = ecdsa.EcdsaSecp256k1Sha256.SecretKey;
+const p256k_public_key = ecdsa.EcdsaSecp256k1Sha256.PublicKey;
+
 // generate p256 public key
 const p256_kp = ecdsa.EcdsaP256Sha256.KeyPair.generate();
 
 // generate p384 public key
 const p384_kp = ecdsa.EcdsaP384Sha384.KeyPair.generate();
+
+// generate p256k public key
+const p256k_kp = ecdsa.EcdsaSecp256k1Sha256.KeyPair.generate();
 ~~~
 
 EdDSA PublicKey:

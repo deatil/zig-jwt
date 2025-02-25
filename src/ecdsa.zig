@@ -9,6 +9,8 @@ pub const SigningES256 = SignECDSA(ecdsa.EcdsaP256Sha256, "ES256");
 pub const SigningES384 = SignECDSA(ecdsa.EcdsaP384Sha384, "ES384");
 // pub const SigningES512 = SignECDSA(ecdsa.EcdsaP512Sha512, "ES512");
 
+pub const SigningES256K = SignECDSA(ecdsa.EcdsaSecp256k1Sha256, "ES256K");
+
 pub fn SignECDSA(comptime EC: type, comptime name: []const u8) type {
     return struct {
         alloc: Allocator, 
@@ -105,6 +107,30 @@ test "SigningES384" {
     const signed = try h.sign(msg, kp.secret_key);
 
     try testing.expectEqual(96, signed.len);
+
+    const veri = h.verify(msg, signed, kp.public_key);
+
+    try testing.expectEqual(true, veri);
+
+}
+
+test "SigningES256K" {
+    const alloc = std.heap.page_allocator;
+
+    const h = SigningES256K.init(alloc);
+
+    const alg = h.alg();
+    const signLength = h.signLength();
+    try testing.expectEqual(64, signLength);
+    try testing.expectEqualStrings("ES256K", alg);
+
+    const kp = ecdsa.EcdsaSecp256k1Sha256.KeyPair.generate();
+
+    const msg = "test-data";
+
+    const signed = try h.sign(msg, kp.secret_key);
+
+    try testing.expectEqual(64, signed.len);
 
     const veri = h.verify(msg, signed, kp.public_key);
 
