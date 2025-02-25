@@ -181,119 +181,6 @@ pub const Token = struct {
     pub fn getSignature(self: *Self) []const u8 {
         return self.signature;
     }
-
-    pub fn isPermittedFor(self: *Self, audience: []const u8) !bool {
-       const claims = try self.getClaims();
-
-        if (claims.object.get("aud")) |val| {
-            if (val == .string) {
-                if (utils.eq(audience, val.string)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        return false;
-    }
-
-    pub fn isIdentifiedBy(self: *Self, id: []const u8) !bool {
-       const claims = try self.getClaims();
-
-        if (claims.object.get("jti")) |val| {
-            if (val == .string) {
-                if (utils.eq(id, val.string)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        return false;
-    }
-
-    pub fn isRelatedTo(self: *Self, subject: []const u8) !bool {
-       const claims = try self.getClaims();
-
-        if (claims.object.get("sub")) |val| {
-            if (val == .string) {
-                if (utils.eq(subject, val.string)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        return false;
-    }
-
-    pub fn hasBeenIssuedBy(self: *Self, issuer: []const u8) !bool {
-       const claims = try self.getClaims();
-
-        if (claims.object.get("iss")) |val| {
-            if (val == .string) {
-                if (utils.eq(issuer, val.string)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        return false;
-    }
-
-    pub fn hasBeenIssuedBefore(self: *Self, now: i64) !bool {
-       const claims = try self.getClaims();
-
-        if (claims.object.get("iat")) |val| {
-            if (val == .integer) {
-                if (now > val.integer) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        return true;
-    }
-
-    pub fn isMinimumTimeBefore(self: *Self, now: i64) !bool {
-       const claims = try self.getClaims();
-
-        if (claims.object.get("nbf")) |val| {
-            if (val == .integer) {
-                if (now > val.integer) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        return true;
-    }
-
-    pub fn isExpired(self: *Self, now: i64) !bool {
-       const claims = try self.getClaims();
-
-        if (claims.object.get("exp")) |val| {
-            if (val == .integer) {
-                if (now <= val.integer) {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        return false;
-    }
-
 };
 
 test "Token" {
@@ -326,6 +213,19 @@ test "Token" {
     try testing.expectEqualStrings(check2, res2);
 
     // ====================
+
+    // pub const ObjectMap = StringArrayHashMap(Value);
+    // pub const Array = ArrayList(Value);
+    // pub const json.Value = union(enum) {
+    //     null,
+    //     bool: bool,
+    //     integer: i64,
+    //     float: f64,
+    //     number_string: []const u8,
+    //     string: []const u8,
+    //     array: Array,
+    //     object: ObjectMap,
+    // }
 
     var token2 = Token.init(alloc);
     try token2.parse(check1);
@@ -474,72 +374,4 @@ test "Token 3" {
     try testing.expectEqualStrings(header.alg, header33.object.get("alg").?.string);
     try testing.expectEqualStrings(header.kid.?, header33.object.get("kid").?.string);
 
-}
-
-test "Token isExpired" {
-    const alloc = std.heap.page_allocator;
-
-    const check1 = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJleHAiOjE3Mzk4MTAzOTB9.dGVzdC1zaWduYXR1cmU";
-    const now = time.timestamp();
-
-    var token = Token.init(alloc);
-    try token.parse(check1);
-    const isExpired = try token.isExpired(now);
-
-    try testing.expectEqual(true, isExpired);
-    try testing.expectEqualStrings(check1, token.raw);
-
-    // pub const ObjectMap = StringArrayHashMap(Value);
-    // pub const Array = ArrayList(Value);
-    // pub const json.Value = union(enum) {
-    //     null,
-    //     bool: bool,
-    //     integer: i64,
-    //     float: f64,
-    //     number_string: []const u8,
-    //     string: []const u8,
-    //     array: Array,
-    //     object: ObjectMap,
-    // }
-
-    const claims = try token.getClaims();
-    try testing.expectEqual(true, claims.object.get("exp").?.integer > 0);
-    
-}
-
-test "Token isMinimumTimeBefore" {
-    const alloc = std.heap.page_allocator;
-
-    const check1 = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJhdWQiOiJleGFtcGxlLmNvbSIsImlhdCI6ImZvbyIsIm5iZiI6MTczOTgxNjU0MH0.dGVzdC1zaWduYXR1cmU";
-    const now = time.timestamp();
-
-    var token = Token.init(alloc);
-    try token.parse(check1);
-    const isMinimumTimeBefore = try token.isMinimumTimeBefore(now);
-
-    try testing.expectEqual(true, isMinimumTimeBefore);
-
-    const claims = try token.getClaims();
-    try testing.expectEqual(true, claims.object.get("nbf").?.integer > 0);
-    
-}
-
-test "Token hasBeenIssuedBefore" {
-    const alloc = std.heap.page_allocator;
-
-    const check1 = "eyJ0eXAiOiJKV0UiLCJhbGciOiJFUzI1NiIsImtpZCI6ImtpZHMifQ.eyJpc3MiOiJpc3MiLCJpYXQiOjE1Njc4NDIzODgsImV4cCI6MTc2Nzg0MjM4OCwiYXVkIjoiZXhhbXBsZS5jb20iLCJzdWIiOiJzdWIiLCJqdGkiOiJqdGkgcnJyIiwibmJmIjoxNTY3ODQyMzg4fQ.dGVzdC1zaWduYXR1cmU";
-    const now = time.timestamp();
-
-    var token = Token.init(alloc);
-    try token.parse(check1);
-
-    try testing.expectEqual(true, try token.hasBeenIssuedBy("iss"));
-    try testing.expectEqual(true, try token.isRelatedTo("sub"));
-    try testing.expectEqual(true, try token.isIdentifiedBy("jti rrr"));
-    try testing.expectEqual(true, try token.isPermittedFor("example.com"));
-    try testing.expectEqual(true, try token.hasBeenIssuedBefore(now));
-
-    const claims = try token.getClaims();
-    try testing.expectEqual(true, claims.object.get("nbf").?.integer > 0);
-    
 }
