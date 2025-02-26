@@ -83,11 +83,11 @@ pub fn main() !void {
     std.debug.print("make jwt: {s} \n", .{token_string});
 
     const p = jwt.SigningMethodEdDSA.init(alloc);
-    var parsed = try p.parse(token_string, kp.public_key);
+    var token = try p.parse(token_string, kp.public_key);
     
     // output: 
     // claims aud: example.com
-    const claims2 = try parsed.getClaims();
+    const claims2 = try token.getClaims();
     std.debug.print("claims aud: {s} \n", .{claims2.object.get("aud").?.string});
 }
 ~~~

@@ -85,13 +85,15 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
             try t.setHeader(header);
             try t.setClaims(claims);
 
-            const signing_string = try t.signingString();
             defer t.deinit();
 
-            const signature = try self.signer.sign(signing_string, secret_key);
-            t.withSignature(signature);
+            const signing_string = try t.signingString();
+            defer self.alloc.free(signing_string);
 
+            const signature = try self.signer.sign(signing_string, secret_key);
             defer self.alloc.free(signature);
+
+            t.withSignature(signature);
 
             const signed_token = try t.signedString();
             return signed_token;
@@ -111,13 +113,16 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
             }
 
             const signature = t.getSignature();
-    
+            defer self.alloc.free(signature);
+
             const token_sign = try self.alloc.alloc(u8, signature.len);
             @memcpy(token_sign[0..], signature[0..]);
 
             defer self.alloc.free(token_sign);
 
             const signing_string = try t.signingString();
+            defer self.alloc.free(signing_string);
+            
             if (!self.signer.verify(signing_string, token_sign, public_key)) {
                 return Error.JWTVerifyFail;
             }
