@@ -11,6 +11,7 @@ pub const rsa_pss = @import("rsa_pss.zig");
 pub const ecdsa = @import("ecdsa.zig");
 pub const eddsa = @import("eddsa.zig");
 pub const hmac = @import("hmac.zig");
+pub const blake2b = @import("blake2b.zig");
 pub const none = @import("none.zig");
 pub const utils = @import("utils.zig");
 pub const builder = @import("builder.zig");
@@ -39,6 +40,8 @@ pub const SigningMethodHS256 = JWT(hmac.SigningHS256, []const u8, []const u8);
 pub const SigningMethodHS384 = JWT(hmac.SigningHS384, []const u8, []const u8);
 pub const SigningMethodHS512 = JWT(hmac.SigningHS512, []const u8, []const u8);
 
+pub const SigningMethodBLAKE2B = JWT(blake2b.SigningBlake2b, []const u8, []const u8);
+
 pub const SigningMethodNone = JWT(none.SigningNone, []const u8, []const u8);
 
 pub const Error = error {
@@ -48,8 +51,8 @@ pub const Error = error {
     JWTAlgoInvalid
 };
 
-pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicKeyType: type) type {
-    const BuilderType = builder.Builder(Signer, SecretKeyType);
+pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKeyType: type) type {
+    const BuilderType = builder.Builder(Signer, SignKeyType);
     
     return struct {
         signer: Signer,
@@ -73,17 +76,17 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
         }
 
         // use SigningMethod to make token
-        pub fn sign(self: Self, claims: anytype, secret_key: SecretKeyType) ![]const u8 {
+        pub fn sign(self: Self, claims: anytype, sign_key: SignKeyType) ![]const u8 {
             const header = .{
                 .typ = "JWT",
                 .alg = self.signer.alg(),
             };
 
-            return try self.signWithHeader(header, claims, secret_key);
+            return try self.signWithHeader(header, claims, sign_key);
         }
 
         // use SigningMethod with header to make token
-        pub fn signWithHeader(self: Self, header: anytype, claims: anytype, secret_key: SecretKeyType) ![]const u8 {
+        pub fn signWithHeader(self: Self, header: anytype, claims: anytype, sign_key: SignKeyType) ![]const u8 {
             var t = Token.init(self.alloc);
             try t.setHeader(header);
             try t.setClaims(claims);
@@ -93,7 +96,7 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
             const signing_string = try t.signingString();
             defer self.alloc.free(signing_string);
 
-            const signature = try self.signer.sign(signing_string, secret_key);
+            const signature = try self.signer.sign(signing_string, sign_key);
             defer self.alloc.free(signature);
 
             t.withSignature(signature);
@@ -103,7 +106,7 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
         }
 
         // parse token and verify token signature
-        pub fn parse(self: Self, token_string: []const u8, public_key: PublicKeyType) !Token {
+        pub fn parse(self: Self, token_string: []const u8, verify_key: VerifyKeyType) !Token {
             var t = Token.init(self.alloc);
             try t.parse(token_string);
 
@@ -126,7 +129,7 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
             const signing_string = try t.signingString();
             defer self.alloc.free(signing_string);
 
-            if (!self.signer.verify(signing_string, token_sign, public_key)) {
+            if (!self.signer.verify(signing_string, token_sign, verify_key)) {
                 return Error.JWTVerifyFail;
             }
 
@@ -185,6 +188,10 @@ pub fn getSigningMethod(name: []const u8) !type {
         return SigningMethodES384;
     }
 
+    if (utils.eq(name, "ES256K")) {
+        return SigningMethodES256K;
+    }
+
     if (utils.eq(name, "EdDSA")) {
         return SigningMethodEdDSA;
     }
@@ -197,6 +204,10 @@ pub fn getSigningMethod(name: []const u8) !type {
     }
     if (utils.eq(name, "HS512")) {
         return SigningMethodHS512;
+    }
+
+    if (utils.eq(name, "BLAKE2B")) {
+        return SigningMethodBLAKE2B;
     }
 
     if (utils.eq(name, "none")) {
@@ -226,11 +237,15 @@ test "getSigningMethod" {
     try testing.expectEqual(SigningMethodES256, try getSigningMethod("ES256"));
     try testing.expectEqual(SigningMethodES384, try getSigningMethod("ES384"));
 
+    try testing.expectEqual(SigningMethodES256K, try getSigningMethod("ES256K"));
+
     try testing.expectEqual(SigningMethodEdDSA, try getSigningMethod("EdDSA"));
 
     try testing.expectEqual(SigningMethodHS256, try getSigningMethod("HS256"));
     try testing.expectEqual(SigningMethodHS384, try getSigningMethod("HS384"));
     try testing.expectEqual(SigningMethodHS512, try getSigningMethod("HS512"));
+
+    try testing.expectEqual(SigningMethodBLAKE2B, try getSigningMethod("BLAKE2B"));
 
     try testing.expectEqual(SigningMethodNone, try getSigningMethod("none"));
 
@@ -544,6 +559,30 @@ test "SigningMethodHS512" {
     // ==========
 
     const p = SigningMethodHS512.init(alloc);
+    var parsed = try p.parse(token_string, key);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
+
+}
+
+test "SigningMethodBLAKE2B" {
+    const alloc = std.heap.page_allocator;
+
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+    const key = "12345678901234567890as1234567890";
+
+    const s = SigningMethodBLAKE2B.init(alloc);
+    const token_string = try s.sign(claims, key);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = SigningMethodBLAKE2B.init(alloc);
     var parsed = try p.parse(token_string, key);
 
     const claims2 = try parsed.getClaims();
@@ -876,6 +915,56 @@ test "SigningMethodHS256 Check fail" {
     const key_bytes = try fmt.hexToBytes(&key_buf, key);
 
     const p = SigningMethodHS256.init(alloc);
+
+    var need_true: bool = false;
+    _ = p.parse(token_str, key_bytes) catch |err| {
+        need_true = true;
+        try testing.expectEqual(Error.JWTVerifyFail, err);
+    };
+    try testing.expectEqual(true, need_true);
+
+}
+
+test "SigningMethodBLAKE2B Check" {
+    const alloc = std.heap.page_allocator;
+
+    const key = "0323354b2b0fa5bc837e0665777ba68f5ab328e6f054c928a90f84b2d2502ebfd3fb5a92d20647ef968ab4c377623d223d2e2172052e4f08c0cd9af567d080a3";
+    const token_str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJCTEFLRTJCIn0.eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.zVtM3_PWCeOBjiV3bJcx1KoxeZCUs7zqfy6DF2mfb9M";
+
+    var key_buf: [key.len]u8 = undefined;
+    const key_bytes = try fmt.hexToBytes(&key_buf, key);
+
+    const claims = .{
+        .iss = "joe",
+        .exp = 1300819380,
+        .@"http://example.com/is_root" = true,
+    };
+
+    const s = SigningMethodBLAKE2B.init(alloc);
+    const token_string = try s.sign(claims, key_bytes);
+    try testing.expectEqual(true, token_string.len > 0);
+    try testing.expectEqualStrings(token_str, token_string);
+
+    // ==========
+
+    const p = SigningMethodBLAKE2B.init(alloc);
+    var parsed = try p.parse(token_str, key_bytes);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings(claims.iss, claims2.object.get("iss").?.string);
+
+}
+
+test "SigningMethodBLAKE2B Check fail" {
+    const alloc = std.heap.page_allocator;
+
+    const key = "0323354b2b0fa5bc837e0665777ba68f5ab328e6f054c928a90f84b2d2502ebfd3fb5a92d20647ef968ab4c377623d223d2e2172052e4f08c0cd9af567d080a3";
+    const token_str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJCTEFLRTJCIn0.eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.zVtM3_PWCeOBjiV3bJcx1KoxeZCUs7zqfy6DF2mfb12";
+
+    var key_buf: [key.len]u8 = undefined;
+    const key_bytes = try fmt.hexToBytes(&key_buf, key);
+
+    const p = SigningMethodBLAKE2B.init(alloc);
 
     var need_true: bool = false;
     _ = p.parse(token_str, key_bytes) catch |err| {

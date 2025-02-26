@@ -152,6 +152,8 @@ The JWT library have signing methods:
  - `HS384`: jwt.SigningMethodHS384
  - `HS512`: jwt.SigningMethodHS512
 
+ - `BLAKE2B`: jwt.SigningMethodBLAKE2B
+
  - `none`: jwt.SigningMethodNone
 
 
