@@ -13,6 +13,7 @@ pub const eddsa = @import("eddsa.zig");
 pub const hmac = @import("hmac.zig");
 pub const none = @import("none.zig");
 pub const utils = @import("utils.zig");
+pub const builder = @import("builder.zig");
 
 pub const Token = @import("token.zig").Token;
 pub const Validator = @import("validator.zig").Validator;
@@ -48,6 +49,8 @@ pub const Error = error {
 };
 
 pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicKeyType: type) type {
+    const BuilderType = builder.Builder(Signer, SecretKeyType);
+    
     return struct {
         signer: Signer,
         alloc: Allocator, 
@@ -122,12 +125,16 @@ pub fn JWT(comptime Signer: type, comptime SecretKeyType: type, comptime PublicK
 
             const signing_string = try t.signingString();
             defer self.alloc.free(signing_string);
-            
+
             if (!self.signer.verify(signing_string, token_sign, public_key)) {
                 return Error.JWTVerifyFail;
             }
 
             return t;
+        }
+
+        pub fn build(self: Self) BuilderType {
+            return BuilderType.init(self.alloc);
         }
     };
 }
@@ -293,6 +300,41 @@ test "Token Validator" {
     const claims = try token.getClaims();
     try testing.expectEqual(true, claims.object.get("nbf").?.integer > 0);
     
+}
+
+test "SigningMethodEdDSA builder" {
+    const alloc = std.heap.page_allocator;
+
+    const kp = eddsa.Ed25519.KeyPair.generate();
+
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+
+    var build = SigningMethodEdDSA.init(alloc).build();
+
+    var c = build.claimsData();
+    defer c.deinit();
+
+    try c.begin();
+    try c.permittedFor(claims.aud);
+    try c.relatedTo(claims.sub);
+    try c.end();
+
+    var t = try build.getToken(kp.secret_key);
+    const token_string = try t.signedString();
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = SigningMethodEdDSA.init(alloc);
+    var parsed = try p.parse(token_string, kp.public_key);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
+
 }
 
 test "SigningMethodEdDSA signWithHeader" {
