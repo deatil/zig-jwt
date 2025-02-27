@@ -53,17 +53,19 @@ pub fn Builder(comptime Signer: type, comptime SecretKeyType: type) type {
         }
 
         pub fn getToken(self: *Self, secret_key: SecretKeyType) !Token {
-            self.headers = Values.init(self.alloc);
-            
-            var h = self.headersData();
-            defer h.deinit();
+            var header = try self.getHeaders();
+            if (header.len == 0) {
+                var h = self.headersData();
+                defer h.deinit();
 
-            try h.begin();
-            try h.setData("typ", "JWT");
-            try h.setData("alg", self.signer.alg());
-            try h.end();
-              
-            const header = try self.getHeaders();
+                try h.begin();
+                try h.setData("typ", "JWT");
+                try h.setData("alg", self.signer.alg());
+                try h.end();
+
+                header = try self.getHeaders();
+            }
+
             const claims = try self.getClaims();
             
             var t = Token.init(self.alloc);
@@ -224,11 +226,11 @@ test "Builder" {
 
     try h.begin();
     try h.setData("typ", "JWT");
-    try h.setData("alg", "ES256");
+    try h.setData("alg", "HS256");
     try h.end();
 
     const check2 = 
-        \\{"typ":"JWT","alg":"ES256"}
+        \\{"typ":"JWT","alg":"HS256"}
     ;
 
     const claims2 = try build.getHeaders();
@@ -241,6 +243,11 @@ test "Builder" {
     var t = try build.getToken(kp.secret_key);
     const token_string = try t.signedString();
     try testing.expectEqual(true, token_string.len > 0);
+
+    const check3 = 
+        \\{"typ":"JWT","alg":"HS256"}
+    ;
+    try testing.expectEqualStrings(check3, t.header);
 }
 
 test "Builder 2" {
@@ -277,4 +284,45 @@ test "Builder 2" {
     const token_string = try t.signedString();
     try testing.expectEqual(true, token_string.len > 0);
 
+}
+
+test "Builder 3" {
+    const alloc = std.heap.page_allocator;
+
+    var build = Builder(eddsa.SigningEdDSA, eddsa.Ed25519.SecretKey).init(alloc);
+    defer build.deinit();
+
+    var b = build.claimsData();
+    defer b.deinit();
+
+    try b.begin();
+    try b.permittedFor("permitted_for");
+    try b.expiresAt(1567842388);
+    try b.identifiedBy("identified_by");
+    try b.issuedAt(1567842389);
+    try b.issuedBy("issued_by");
+    try b.canOnlyBeUsedAfter(1567842387);
+    try b.relatedTo("related_to");
+    try b.setData("foo", "bar");
+    try b.end();
+
+    const check = 
+        \\{"aud":"permitted_for","exp":1567842388,"jti":"identified_by","iat":1567842389,"iss":"issued_by","nbf":1567842387,"sub":"related_to","foo":"bar"}
+    ;
+
+    const claims = try build.getClaims();
+    try testing.expectEqualStrings(check, claims);
+
+    // =======
+
+    const kp = eddsa.Ed25519.KeyPair.generate();
+
+    var t = try build.getToken(kp.secret_key);
+    const token_string = try t.signedString();
+    try testing.expectEqual(true, token_string.len > 0);
+
+    const check3 = 
+        \\{"typ":"JWT","alg":"EdDSA"}
+    ;
+    try testing.expectEqualStrings(check3, t.header);
 }
