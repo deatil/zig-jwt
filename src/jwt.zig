@@ -36,6 +36,9 @@ pub const SigningMethodES256K = JWT(ecdsa.SigningES256K, ecdsa.ecdsa.EcdsaSecp25
 pub const SigningMethodEdDSA = JWT(eddsa.SigningEdDSA, eddsa.Ed25519.SecretKey, eddsa.Ed25519.PublicKey);
 pub const SigningMethodED25519 = JWT(eddsa.SigningED25519, eddsa.Ed25519.SecretKey, eddsa.Ed25519.PublicKey);
 
+pub const SigningMethodHMD5 = JWT(hmac.SigningHMD5, []const u8, []const u8);
+pub const SigningMethodHSHA1 = JWT(hmac.SigningHSHA1, []const u8, []const u8);
+pub const SigningMethodHS224 = JWT(hmac.SigningHS224, []const u8, []const u8);
 pub const SigningMethodHS256 = JWT(hmac.SigningHS256, []const u8, []const u8);
 pub const SigningMethodHS384 = JWT(hmac.SigningHS384, []const u8, []const u8);
 pub const SigningMethodHS512 = JWT(hmac.SigningHS512, []const u8, []const u8);
@@ -488,6 +491,78 @@ test "SigningMethodES256K" {
 
     const p = SigningMethodES256K.init(alloc);
     var parsed = try p.parse(token_string, kp.public_key);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
+
+}
+
+test "SigningMethodHMD5" {
+    const alloc = std.heap.page_allocator;
+
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+    const key = "test-key";
+
+    const s = SigningMethodHMD5.init(alloc);
+    const token_string = try s.sign(claims, key);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = SigningMethodHMD5.init(alloc);
+    var parsed = try p.parse(token_string, key);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
+
+}
+
+test "SigningMethodHSHA1" {
+    const alloc = std.heap.page_allocator;
+
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+    const key = "test-key";
+
+    const s = SigningMethodHSHA1.init(alloc);
+    const token_string = try s.sign(claims, key);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = SigningMethodHSHA1.init(alloc);
+    var parsed = try p.parse(token_string, key);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
+
+}
+
+test "SigningMethodHS224" {
+    const alloc = std.heap.page_allocator;
+
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+    const key = "test-key";
+
+    const s = SigningMethodHS224.init(alloc);
+    const token_string = try s.sign(claims, key);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = SigningMethodHS224.init(alloc);
+    var parsed = try p.parse(token_string, key);
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
