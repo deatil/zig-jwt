@@ -383,21 +383,21 @@ pub const KeyPair = struct {
 };
 
 pub const PrecomputedValues = struct {
-	dp: Fe, // D mod (P-1)
+    dp: Fe, // D mod (P-1)
     dq: Fe, // D mod (Q-1)
-	qinv: Fe, // Q^-1 mod P
+    qinv: Fe, // Q^-1 mod P
 
-	// CRTValues is used for the 3rd and subsequent primes. Due to a
-	// historical accident, the CRT for the first two primes is handled
-	// differently in PKCS #1 and interoperability is sufficiently
-	// important that we mirror this.
+    // CRTValues is used for the 3rd and subsequent primes. Due to a
+    // historical accident, the CRT for the first two primes is handled
+    // differently in PKCS #1 and interoperability is sufficiently
+    // important that we mirror this.
     crt_values: [2]CRTValue,
 };
 
 pub const CRTValue = struct {
-	exp: Fe, // D mod (prime-1).
-	coeff: Fe, // R·Coeff ≡ 1 mod Prime.
-	r: Fe, // product of primes prior to this (inc p and q).
+    exp: Fe, // D mod (prime-1).
+    coeff: Fe, // R·Coeff ≡ 1 mod Prime.
+    r: Fe, // product of primes prior to this (inc p and q).
 };
 
 /// Deprecated.

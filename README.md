@@ -5,7 +5,7 @@ A JWT (JSON Web Token) library for zig.
 
 ### Env
 
- - Zig >= 0.14.0-dev.2851+b074fb7dd
+ - Zig >= 0.14.0-dev.3451+d8d2aa9af
 
 
 ### What the heck is a JWT?
@@ -182,12 +182,21 @@ const p256k_public_key = ecdsa.EcdsaSecp256k1Sha256.PublicKey;
 
 // generate p256 public key
 const p256_kp = ecdsa.EcdsaP256Sha256.KeyPair.generate();
+// from plain bytes
+const p256_secret_key = try ecdsa.EcdsaP256Sha256.SecretKey.fromBytes(pri_key_buf);
+const p256_public_key = try ecdsa.EcdsaP256Sha256.PublicKey.fromSec1(pub_key_bytes);
 
 // generate p384 public key
 const p384_kp = ecdsa.EcdsaP384Sha384.KeyPair.generate();
+// from plain bytes
+const p384_secret_key = try ecdsa.EcdsaP384Sha384.SecretKey.fromBytes(pri_key_buf);
+const p384_public_key = try ecdsa.EcdsaP384Sha384.PublicKey.fromSec1(pub_key_bytes);
 
 // generate p256k public key
 const p256k_kp = ecdsa.EcdsaSecp256k1Sha256.KeyPair.generate();
+// from plain bytes
+const p256k_secret_key = try ecdsa.EcdsaSecp256k1Sha256.SecretKey.fromBytes(pri_key_buf);
+const p256k_public_key = try ecdsa.EcdsaSecp256k1Sha256.PublicKey.fromSec1(pub_key_bytes);
 ~~~
 
 EdDSA PublicKey:
@@ -199,6 +208,10 @@ const public_key = Ed25519.PublicKey;
 
 // generate public key
 const kp = Ed25519.KeyPair.generate();
+
+// from plain bytes
+const secret_key = try Ed25519.SecretKey.fromBytes(pri_key_buf);
+const public_key = try Ed25519.PublicKey.fromBytes(pub_key_buf);
 ~~~
 
 
