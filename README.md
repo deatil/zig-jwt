@@ -165,6 +165,10 @@ const secret_key = jwt.crypto_rsa.SecretKey;
 const public_key = jwt.crypto_rsa.PublicKey;
 
 // rsa no generate
+
+// from plain bytes
+const secret_key = try jwt.crypto_rsa.SecretKey.fromDer(prikey_bytes);
+const public_key = try jwt.crypto_rsa.PublicKey.fromDer(pubkey_bytes);
 ~~~
 
 ECDSA PublicKey:
