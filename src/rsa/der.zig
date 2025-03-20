@@ -24,14 +24,7 @@ pub const Parser = struct {
     bytes: []const u8,
     index: Index = 0,
 
-    pub const Error = Element.Error || error{
-        UnexpectedElement,
-        InvalidIntegerEncoding,
-        Overflow,
-        NonCanonical,
-    };
-
-    pub fn expectBool(self: *Parser) Error!bool {
+    pub fn expectBool(self: *Parser) !bool {
         const ele = try self.expect(.universal, false, .boolean);
         if (ele.slice.len() != 1) return error.InvalidBool;
 
@@ -42,7 +35,7 @@ pub const Parser = struct {
         };
     }
 
-    pub fn expectBitstring(self: *Parser) Error!BitString {
+    pub fn expectBitstring(self: *Parser) !BitString {
         const ele = try self.expect(.universal, false, .bitstring);
         const bytes = self.view(ele);
         const right_padding = bytes[0];
@@ -54,7 +47,7 @@ pub const Parser = struct {
     }
 
     // TODO: return high resolution date time type instead of epoch seconds
-    pub fn expectDateTime(self: *Parser) Error!i64 {
+    pub fn expectDateTime(self: *Parser) !i64 {
         const ele = try self.expect(.universal, false, null);
         const bytes = self.view(ele);
         switch (ele.identifier.tag) {
@@ -93,12 +86,12 @@ pub const Parser = struct {
         }
     }
 
-    pub fn expectOid(self: *Parser) Error![]const u8 {
+    pub fn expectOid(self: *Parser) ![]const u8 {
         const oid = try self.expect(.universal, false, .object_identifier);
         return self.view(oid);
     }
 
-    pub fn expectEnum(self: *Parser, comptime Enum: type) Error!Enum {
+    pub fn expectEnum(self: *Parser, comptime Enum: type) !Enum {
         const oid = try self.expectOid();
         return Enum.oids.get(oid) orelse {
             if (builtin.mode == .Debug) {
@@ -111,7 +104,7 @@ pub const Parser = struct {
         };
     }
 
-    pub fn expectInt(self: *Parser, comptime T: type) Error!T {
+    pub fn expectInt(self: *Parser, comptime T: type) !T {
         const ele = try self.expectPrimitive(.integer);
         const bytes = self.view(ele);
 
@@ -130,7 +123,7 @@ pub const Parser = struct {
         return @bitCast(result);
     }
 
-    pub fn expectString(self: *Parser, allowed: std.EnumSet(String.Tag)) Error!String {
+    pub fn expectString(self: *Parser, allowed: std.EnumSet(String.Tag)) !String {
         const ele = try self.expect(.universal, false, null);
         switch (ele.identifier.tag) {
             inline .string_utf8,
@@ -154,7 +147,7 @@ pub const Parser = struct {
         return error.UnexpectedElement;
     }
 
-    pub fn expectPrimitive(self: *Parser, tag: ?Identifier.Tag) Error!Element {
+    pub fn expectPrimitive(self: *Parser, tag: ?Identifier.Tag) !Element {
         var elem = try self.expect(.universal, false, tag);
         if (tag == .integer and elem.slice.len() > 0) {
             if (self.view(elem)[0] == 0) elem.slice.start += 1;
@@ -164,16 +157,16 @@ pub const Parser = struct {
     }
 
     /// Remember to call `expectEnd`
-    pub fn expectSequence(self: *Parser) Error!Element {
+    pub fn expectSequence(self: *Parser) !Element {
         return try self.expect(.universal, true, .sequence);
     }
 
     /// Remember to call `expectEnd`
-    pub fn expectSequenceOf(self: *Parser) Error!Element {
+    pub fn expectSequenceOf(self: *Parser) !Element {
         return try self.expect(.universal, true, .sequence_of);
     }
 
-    pub fn expectEnd(self: *Parser, val: usize) Error!void {
+    pub fn expectEnd(self: *Parser, val: usize) !void {
         if (self.index != val) return error.NonCanonical; // either forgot to parse end OR an attacker
     }
 
@@ -182,7 +175,7 @@ pub const Parser = struct {
         class: ?Identifier.Class,
         constructed: ?bool,
         tag: ?Identifier.Tag,
-    ) Error!Element {
+    ) !Element {
         if (self.index >= self.bytes.len) return error.EndOfStream;
 
         const res = try Element.init(self.bytes, self.index);
@@ -229,9 +222,7 @@ pub const Element = struct {
         }
     };
 
-    pub const Error = error{ InvalidLength, EndOfStream };
-
-    pub fn init(bytes: []const u8, index: Index) Error!Element {
+    pub fn init(bytes: []const u8, index: Index) !Element {
         var stream = std.io.fixedBufferStream(bytes[index..]);
         var reader = stream.reader();
 

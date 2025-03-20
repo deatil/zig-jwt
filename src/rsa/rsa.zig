@@ -3,14 +3,17 @@ const std = @import("std");
 const fmt = std.fmt;
 const ff = std.crypto.ff;
 const testing = std.testing;
+const base64 = std.base64;
 const Allocator = std.mem.Allocator;
 
-const der = @import("der.zig");
+pub const der = @import("der.zig");
 
 pub const max_modulus_bits = 4096;
 pub const max_modulus_len = max_modulus_bits / 8;
 
 pub const PSSSaltLengthAuto = 0;
+
+const oid_rsa_publickey = "1.2.840.113549.1.1.1";
 
 const Modulus = std.crypto.ff.Modulus(max_modulus_bits);
 const Fe = Modulus.Fe;
@@ -46,7 +49,7 @@ pub const PublicKey = struct {
         };
     }
 
-    pub fn fromDer(bytes: []const u8) (der.Parser.Error || FromBytesError)!PublicKey {
+    pub fn fromDer(bytes: []const u8) !PublicKey {
         var parser = der.Parser{ .bytes = bytes };
 
         const seq = try parser.expectSequence();
@@ -58,7 +61,35 @@ pub const PublicKey = struct {
         try parser.expectEnd(seq.slice.end);
         try parser.expectEnd(bytes.len);
 
-        return try fromBytes(parser.view(modulus), parser.view(pub_exp));
+        return fromBytes(parser.view(modulus), parser.view(pub_exp));
+    }
+
+    pub fn fromPKCS8Der(bytes: []const u8) !PublicKey {
+        var parser = der.Parser{ .bytes = bytes };
+
+        _ = try parser.expectSequence();
+        const oid_seq = try parser.expectSequence();
+        const oid = try parser.expectOid();
+
+        var buf: [256]u8 = undefined;
+        var stream = std.io.fixedBufferStream(&buf);
+        try @import("./oid.zig").decode(oid, stream.writer());
+
+        const oid_string = stream.getWritten();
+        if (!std.mem.eql(u8, oid_string, oid_rsa_publickey)) {
+            return error.RSAOidError;
+        }
+
+        var parser2 = der.Parser{ .bytes = bytes };
+        const seq2 = try parser2.expectSequence();
+
+        parser2.seek(oid_seq.slice.end);
+        const pubkey = try parser2.expectBitstring();
+
+        try parser2.expectEnd(seq2.slice.end);
+        try parser2.expectEnd(bytes.len);
+
+        return PublicKey.fromDer(pubkey.bytes);
     }
 
     /// Deprecated.
@@ -145,7 +176,9 @@ pub const SecretKey = struct {
     // operations, if available.
     precomputed: ?PrecomputedValues = null,
 
-    pub fn fromBytes(public: PublicKey, dbytes: []const u8, p: Fe, q: Fe) !SecretKey {
+    pub fn fromBytes(n: []const u8, e: []const u8, dbytes: []const u8, p: Fe, q: Fe) !SecretKey {
+        const public = try PublicKey.fromBytes(n, e);
+    
         const d = try Fe.fromBytes(public.n, dbytes, .big);
 
         // > The RSA private exponent d is a positive integer less than n
@@ -171,7 +204,10 @@ pub const SecretKey = struct {
         const pub_exp = try parser.expectPrimitive(.integer);
         const sec_exp = try parser.expectPrimitive(.integer);
 
-        const public = try PublicKey.fromBytes(parser.view(mod), parser.view(pub_exp));
+        const n = parser.view(mod);
+        const e = parser.view(pub_exp);
+
+        const public = try PublicKey.fromBytes(n, e);
 
         const prime1 = try parser.expectPrimitive(.integer);
         const prime2 = try parser.expectPrimitive(.integer);
@@ -216,7 +252,40 @@ pub const SecretKey = struct {
             // if (public.n.mul(de, q).compare(one) != .eq) return error.KeyMismatch;
         }
 
-        return try SecretKey.fromBytes(public, dbytes, p, q);
+        return SecretKey.fromBytes(n, e, dbytes, p, q);
+    }
+
+    pub fn fromPKCS8Der(bytes: []const u8) !SecretKey {
+        var parser = der.Parser{ .bytes = bytes };
+
+        const seq = try parser.expectSequence();
+        const version = try parser.expectInt(u8);
+
+        var parser2 = der.Parser{ .bytes = bytes };
+        parser2.seek(parser.index);
+        const oid_seq = try parser2.expectSequence();
+        const oid = try parser2.expectOid();
+
+        var buf: [256]u8 = undefined;
+        var stream = std.io.fixedBufferStream(&buf);
+        try @import("./oid.zig").decode(oid, stream.writer());
+
+        const oid_string = stream.getWritten();
+        if (!std.mem.eql(u8, oid_string, oid_rsa_publickey)) {
+            return error.RSAOidError;
+        }
+
+        parser.seek(oid_seq.slice.end);
+        const prikey = try parser.expect(.universal, false, .octetstring);
+
+        if (version != 0) {
+            return error.VersionError;
+        }
+
+        try parser.expectEnd(seq.slice.end);
+        try parser.expectEnd(bytes.len);
+
+        return SecretKey.fromDer(parser.view(prikey));
     }
 
     pub fn decryptPkcsv1_5(secret_key: SecretKey, ciphertext: []const u8, out: []u8) ![]const u8 {
@@ -356,7 +425,7 @@ pub const KeyPair = struct {
     pub fn signPkcsv1_5(kp: KeyPair, comptime Hash: type, msg: []const u8, out: []u8) !PKCS1v1_5(Hash).Signature {
         var st = try signerPkcsv1_5(kp, Hash);
         st.update(msg);
-        return try st.finalize(out);
+        return st.finalize(out);
     }
 
     pub fn signerPkcsv1_5(kp: KeyPair, comptime Hash: type) !PKCS1v1_5(Hash).Signer {
@@ -372,7 +441,7 @@ pub const KeyPair = struct {
     ) !Pss(Hash).Signature {
         var st = try signerOaep(kp, Hash, salt);
         st.update(msg);
-        return try st.finalize(out);
+        return st.finalize(out);
     }
 
     /// Salt must outlive returned `PSS.Signer`.
@@ -569,6 +638,7 @@ pub fn PKCS1v1_5(comptime Hash: type) type {
 pub fn Pss(comptime Hash: type) type {
     // RFC 4055 S3.1
     const default_salt_len = Hash.digest_length;
+
     return struct {
         pub const Signature = struct {
             bytes: []u8,
@@ -1044,6 +1114,7 @@ test hexToBytes {
 }
 
 const TestHash = std.crypto.hash.sha2.Sha256;
+
 fn testKeypair() !KeyPair {
     const keypair_bytes = @embedFile("testdata/id_rsa.der");
 
@@ -1166,5 +1237,43 @@ test "rsa PSS signature" {
 
     const signature2 = Pss(TestHash).Signature.fromBytes(sig2_res);
     try signature2.verify(msg, kp.public_key, null);
+
+}
+
+fn base64Decode(alloc: Allocator, input: []const u8) ![]const u8 {
+    const decoder = base64.standard.Decoder;
+    const decode_len = try decoder.calcSizeForSlice(input);
+
+    const buffer = try alloc.alloc(u8, decode_len);
+    _ = decoder.decode(buffer, input) catch {
+        return "";
+    };
+
+    return buffer[0..];
+}
+
+test "Signer with pkcs8 key" {
+    const alloc = std.heap.page_allocator;
+
+    const prikey = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDh/nCDmXaEqxN416b9XjV8acmbqA52uPzKbesWQRT/BPxEO2dKAURk5CkcSBDskvfzFR9TRjeDppjD1BPSEnuYKnP0SvmotoxcnBnHMfMBqGV8DSJyppu8k4y9C3MPq5C/rA8TJm0NNaJCL0BfAGkeyw+elgYifbRlm42VfYGsKVyIeEI9Qghk5Cf8yapMPfWNLKOhChXsyGExMBMonHZeseFH7UNwonNAFJMAaelhVqqmwBFqn6fBGKmvedRO7HIaiEFNKaMna6xJ5Bccjds4MhF7UC5PIdx4Bt7CfxvjrbIRYoBF2l30CNBblIhU992zPkHoaVhDkt1gq3OdO7LvAgMBAAECggEBALCJrWTv7ahnZ3efpqAIBuogTVBd8KaHjVmokds5jehFAbdfXClwYfgaT477MNVNXYmzN1w63sTl0DIxqiYRMCFHEHuGUg6cQ3tYqb50Y2spG9XTANTlF4UxEeDfX8ue7xz7kG8aNlf6TL084iEUVgmrAJGWikZJQjGZWPmtKC3OTeJY5Bev5qHVuMRe+XEM5aQc3ph+lXlOF0Qp0Eg8YRWprrev2faH6prMqu2JGomoac6sfM4QJhtEViF7Gw0XPthPTbF19IefuAwi9psMM/9CnQ+MTWN2i6IxoUdicsFuC+Wdlb3K5V/+uldNSr+ePEhcya+YTLK9IOcVwWKQHykCgYEA8XvuEribf+t0ZPtfxr+DC9nZHXbVoFx0/ARpSG+P/fp3Hn3rO9iYQ6OtZ9mEXTzf+dhYTaRWq6PbCOz6i0It+J8QSBdxU9OcQ4871mDe41IvSc1CCGMW4PeIYtNQEK0zrqhN7SMtKyUd7yAsYRCrIzMc7NjE2qJvFw5kh7xC3Q0CgYEA75Qjn5daNYSAOa/ILdOs5J/8oIaO27RNK/fSKm/btsMsyum8+YP/mWmm1MXBzG9WEKzZv5yEKOWCEVJYVsFQsGt9yLYW2WIKU5UxiuU0F1RImF/dphIbYOh7oGC3WfYKk2f+K7ftjc196ZkEkDuE2Xh1h75/67Mzztx1DbXj6OsCgYBcDRfFfyWXb5Og4smxo1M680H2H1RzmorlfnD7sbs733wE3Y8L8xanwf7Z9WqleA0Q2k1e22RGbWGTV3JyHzoS6d90+6qxf5qzjigLIkYUdUGdambfd5ZDD1ioA1Ej6kInM/TwjlYreiyc+LCyF36FHnjKOB9iEEU0jsH3k+YRCQKBgHMVLPuHX6zfhhyvxK/Gw4FbHKYbnNoKxRs+wvThoKAtJwIdv0n4TzppVttUV2CVhrkh3sM9MvrWLGGXtZmO6Oyl5dkZJuarQpydyRuYOCqQsQKI4lbY0c/+PQxwCQMsvi3KwXxMsM7yC+6/M0L5ZDp2s7ZOGvKktVlD6vJ4Eg+bAoGARnGGprSBW8dAb/s53r0paPh4k/bySrXdGEprLwk6g3S8+aylcmjUdjcIq4dEb4A/nv12dx1Sc4y99c62R0zi+TT6FYBIFDMz3HNVzO0Jr6SgC6CNVotL0D725CioR5U1NyTHHRLZth69HLuEZCZQlPJCbePXMRRHmOl1svzcVuo=";
+    const pubkey = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
+
+    const prikey_bytes = try base64Decode(alloc, prikey);
+    const pubkey_bytes = try base64Decode(alloc, pubkey);
+
+    const pri_key = try SecretKey.fromPKCS8Der(prikey_bytes);
+    const pub_key = try PublicKey.fromPKCS8Der(pubkey_bytes);
+
+    const msg = "rsa PSS signature";
+    var out: [max_modulus_len]u8 = undefined;
+
+    var sig = Pss(TestHash).Signer.init(pri_key, null);
+    sig.update(msg);
+    const signed = try sig.finalize(&out);
+
+    const signed_bytes = signed.toBytes();
+    try testing.expectEqual(true, signed_bytes.len > 0);
+
+    try signed.verify(msg, pub_key, null);
 
 }
