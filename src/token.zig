@@ -53,11 +53,11 @@ pub const Token = struct {
     }
 
     pub fn signedString(self: *Self) ![]const u8 {
-        return try self.signing(true);
+        return self.signing(true);
     }
 
     pub fn signingString(self: *Self) ![]const u8 {
-        return try self.signing(false);
+        return self.signing(false);
     }
 
     fn signing(self: *Self, need_sign: bool) ![]const u8 {
@@ -77,7 +77,7 @@ pub const Token = struct {
             try buf.appendSlice(signature[0..]);
         }
 
-        return try buf.toOwnedSlice();
+        return buf.toOwnedSlice();
     }
 
     pub fn parse(self: *Self, token_string: []const u8) !void {

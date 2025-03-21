@@ -85,7 +85,7 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
                 .alg = self.signer.alg(),
             };
 
-            return try self.signWithHeader(header, claims, sign_key);
+            return self.signWithHeader(header, claims, sign_key);
         }
 
         // use SigningMethod with header to make token

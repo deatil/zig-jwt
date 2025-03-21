@@ -158,12 +158,12 @@ pub const Parser = struct {
 
     /// Remember to call `expectEnd`
     pub fn expectSequence(self: *Parser) !Element {
-        return try self.expect(.universal, true, .sequence);
+        return self.expect(.universal, true, .sequence);
     }
 
     /// Remember to call `expectEnd`
     pub fn expectSequenceOf(self: *Parser) !Element {
-        return try self.expect(.universal, true, .sequence_of);
+        return self.expect(.universal, true, .sequence_of);
     }
 
     pub fn expectEnd(self: *Parser, val: usize) !void {

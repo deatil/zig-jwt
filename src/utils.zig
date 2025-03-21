@@ -45,7 +45,7 @@ pub fn jsonEncode(alloc: Allocator, value: anytype) ![]const u8 {
 
     try json.stringify(value, .{ .emit_null_optional_fields = false }, out.writer());
 
-    return try out.toOwnedSlice();
+    return out.toOwnedSlice();
 }
 
 pub fn jsonDecode(alloc: Allocator, value: []const u8) !json.Value {

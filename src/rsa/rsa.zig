@@ -1,4 +1,3 @@
-//! RFC8017: Public Key Cryptography Standards #1 v2.2 (PKCS1)
 const std = @import("std");
 const fmt = std.fmt;
 const ff = std.crypto.ff;
@@ -7,6 +6,7 @@ const base64 = std.base64;
 const Allocator = std.mem.Allocator;
 
 pub const der = @import("der.zig");
+pub const oids = @import("oid.zig");
 
 pub const max_modulus_bits = 4096;
 pub const max_modulus_len = max_modulus_bits / 8;
@@ -18,18 +18,11 @@ const oid_rsa_publickey = "1.2.840.113549.1.1.1";
 const Modulus = std.crypto.ff.Modulus(max_modulus_bits);
 const Fe = Modulus.Fe;
 
-pub const ValueError = error{
-    Modulus,
-    Exponent,
-};
-
 pub const PublicKey = struct {
     n: Modulus,
     e: Fe,
 
-    pub const FromBytesError = ValueError || ff.OverflowError || ff.FieldElementError || ff.InvalidModulusError || error{InsecureBitCount};
-
-    pub fn fromBytes(mod: []const u8, exp: []const u8) FromBytesError!PublicKey {
+    pub fn fromBytes(mod: []const u8, exp: []const u8) !PublicKey {
         const n = try Modulus.fromBytes(mod, .big);
         if (n.bits() <= 512) return error.InsecureBitCount;
         const e = try Fe.fromBytes(n, exp, .big);
@@ -66,37 +59,23 @@ pub const PublicKey = struct {
 
     pub fn fromPKCS8Der(bytes: []const u8) !PublicKey {
         var parser = der.Parser{ .bytes = bytes };
+        const seq = try parser.expectSequence();
 
-        _ = try parser.expectSequence();
         const oid_seq = try parser.expectSequence();
         const oid = try parser.expectOid();
 
-        var buf: [256]u8 = undefined;
-        var stream = std.io.fixedBufferStream(&buf);
-        try @import("./oid.zig").decode(oid, stream.writer());
+        try checkRSAPublickeyOid(oid);
 
-        const oid_string = stream.getWritten();
-        if (!std.mem.eql(u8, oid_string, oid_rsa_publickey)) {
-            return error.RSAOidError;
-        }
+        parser.seek(oid_seq.slice.end);
+        const pubkey = try parser.expectBitstring();
 
-        var parser2 = der.Parser{ .bytes = bytes };
-        const seq2 = try parser2.expectSequence();
-
-        parser2.seek(oid_seq.slice.end);
-        const pubkey = try parser2.expectBitstring();
-
-        try parser2.expectEnd(seq2.slice.end);
-        try parser2.expectEnd(bytes.len);
+        try parser.expectEnd(seq.slice.end);
+        try parser.expectEnd(bytes.len);
 
         return PublicKey.fromDer(pubkey.bytes);
     }
 
-    /// Deprecated.
-    ///
     /// Encrypt a short message using RSAES-PKCS1-v1_5.
-    /// The use of this scheme for encrypting an arbitrary message, as opposed to a
-    /// randomly generated key, is NOT RECOMMENDED.
     pub fn encryptPkcsv1_5(pk: PublicKey, msg: []const u8, out: []u8) ![]const u8 {
         // align variable names with spec
         const k = byteLen(pk.n.bits());
@@ -257,30 +236,20 @@ pub const SecretKey = struct {
 
     pub fn fromPKCS8Der(bytes: []const u8) !SecretKey {
         var parser = der.Parser{ .bytes = bytes };
-
         const seq = try parser.expectSequence();
+
         const version = try parser.expectInt(u8);
-
-        var parser2 = der.Parser{ .bytes = bytes };
-        parser2.seek(parser.index);
-        const oid_seq = try parser2.expectSequence();
-        const oid = try parser2.expectOid();
-
-        var buf: [256]u8 = undefined;
-        var stream = std.io.fixedBufferStream(&buf);
-        try @import("./oid.zig").decode(oid, stream.writer());
-
-        const oid_string = stream.getWritten();
-        if (!std.mem.eql(u8, oid_string, oid_rsa_publickey)) {
-            return error.RSAOidError;
+        if (version != 0) {
+            return error.PKCS8VersionError;
         }
+
+        const oid_seq = try parser.expectSequence();
+        const oid = try parser.expectOid();
+
+        try checkRSAPublickeyOid(oid);
 
         parser.seek(oid_seq.slice.end);
         const prikey = try parser.expect(.universal, false, .octetstring);
-
-        if (version != 0) {
-            return error.VersionError;
-        }
 
         try parser.expectEnd(seq.slice.end);
         try parser.expectEnd(bytes.len);
@@ -469,12 +438,20 @@ pub const CRTValue = struct {
     r: Fe, // product of primes prior to this (inc p and q).
 };
 
-/// Deprecated.
-///
+fn checkRSAPublickeyOid(oid: []const u8) !void {
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    try oids.decode(oid, stream.writer());
+
+    const oid_string = stream.getWritten();
+    if (!std.mem.eql(u8, oid_string, oid_rsa_publickey)) {
+        return error.RSAOidError;
+    }
+
+    return;
+}
+
 /// Signature Scheme with Appendix v1.5 (RSASSA-PKCS1-v1_5)
-///
-/// This standard has been superceded by PSS which is formally proven secure
-/// and has fewer footguns.
 pub fn PKCS1v1_5(comptime Hash: type) type {
     return struct {
         const PkcsT = @This();
