@@ -36,12 +36,9 @@ pub fn SignEdDSA(comptime name: []const u8) type {
             var secret_key = try Ed25519.KeyPair.fromSecretKey(key);
 
             const sig = try secret_key.sign(msg[0..], null);
-            var out: [encoded_length]u8 = sig.toBytes();     
+            var out = sig.toBytes();
 
-            const out_string = try self.alloc.alloc(u8, @as(usize, @intCast(self.signLength())));
-            @memcpy(out_string[0..], out[0..]);
-
-            return out_string;
+            return self.alloc.dupe(u8, out[0..]);
         }
 
         pub fn verify(self: Self, msg: []const u8, signature: []u8, key: Ed25519.PublicKey) bool {

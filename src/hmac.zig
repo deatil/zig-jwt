@@ -36,16 +36,13 @@ pub fn SignHmac(comptime Hash: type, comptime name: []const u8) type {
         }
 
         pub fn sign(self: Self, msg: []const u8, key: []const u8) ![]u8 {
+            var out: [mac_length]u8 = undefined;
+
             var h = Hash.init(key);
             h.update(msg[0..]);
-
-            var out: [mac_length]u8 = undefined;
             h.final(out[0..]);
 
-            const out_string = try self.alloc.alloc(u8, @as(usize, @intCast(self.signLength())));
-            @memcpy(out_string[0..], out[0..]);
-
-            return out_string;
+            return self.alloc.dupe(u8, out[0..]);
         }
 
         pub fn verify(self: Self, msg: []const u8, signature: []u8, key: []const u8) bool {
@@ -54,10 +51,10 @@ pub fn SignHmac(comptime Hash: type, comptime name: []const u8) type {
                 return false;
             }
                         
+            var out: [mac_length]u8 = undefined;
+ 
             var h = Hash.init(key);
             h.update(msg[0..]);
-
-            var out: [mac_length]u8 = undefined;
             h.final(out[0..]);
 
             if (std.mem.eql(u8, out[0..], signature[0..])) {

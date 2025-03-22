@@ -49,10 +49,7 @@ pub fn SignRSA(comptime RSAType: type, comptime name: []const u8) type {
             
             const signed = sig.toBytes();
 
-            const out_string = try self.alloc.alloc(u8, signed.len);
-            @memcpy(out_string[0..], signed[0..]);
-
-            return out_string;
+            return self.alloc.dupe(u8, signed[0..]);
         }
 
         pub fn verify(self: Self, msg: []const u8, signature: []u8, key: rsa.PublicKey) bool {
