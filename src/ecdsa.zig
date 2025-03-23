@@ -71,60 +71,26 @@ const oid_ecdsa_publickey = "1.2.840.10045.2.1";
 const oid_ecdsa_p256_namedcurve = "1.2.840.10045.3.1.7";
 const oid_ecdsa_p384_namedcurve = "1.3.132.0.34";
 const oid_ecdsa_p521_namedcurve = "1.3.132.0.35";
+const oid_ecdsa_s256_namedcurve = "1.3.132.0.10";
 
-pub const ParseP256Sha256Der = ParseDer(ecdsa.EcdsaP256Sha256);
-pub const ParseP384Sha384Der = ParseDer(ecdsa.EcdsaP384Sha384);
-// pub const ParseP521Sha512Der = ParseDer(ecdsa.EcdsaP521Sha512);
+pub const ParseP256Sha256Der = ParseKeyDer(ecdsa.EcdsaP256Sha256);
+pub const ParseP384Sha384Der = ParseKeyDer(ecdsa.EcdsaP384Sha384);
+// pub const ParseP521Sha512Der = ParseKeyDer(ecdsa.EcdsaP521Sha512);
 
-// parse der key
-pub fn ParseDer(comptime EC: type) type {
+pub const ParseSecp256k1Sha256Der = ParseKeyDer(ecdsa.EcdsaSecp256k1Sha256);
+
+// parse key der
+pub fn ParseKeyDer(comptime EC: type) type {
     return struct {
         const Self = @This();
 
         pub fn parseSecretKeyDer(bytes: []const u8) !EC.SecretKey {
-            var parser = der.Parser{ .bytes = bytes };
-            const seq = try parser.expectSequence();
-
-            const version = try parser.expectInt(u8);
-            if (version != 1) {
-                return error.ECVersionError;
-            }
-
-            const prikey_octet = try parser.expect(.universal, false, .octetstring);
-            const parse_prikey_bytes = parser.view(prikey_octet);
-
-            const oid_seq = try parser.expect(.context_specific, true, null);
-            const oid = try parser.expectOid();
-
-            switch (EC.SecretKey) {
-                ecdsa.EcdsaP256Sha256.SecretKey => {
-                    try checkECDSAPublickeyNamedCurveOid(oid, oid_ecdsa_p256_namedcurve);
-                },
-                ecdsa.EcdsaP384Sha384.SecretKey => {
-                    try checkECDSAPublickeyNamedCurveOid(oid, oid_ecdsa_p384_namedcurve);
-                },
-                else => {
-                    return error.ErrorNamedCurve;
-                },
-            }
-
-            var prikey: [EC.SecretKey.encoded_length]u8 = undefined;
-            @memcpy(prikey[0..], parse_prikey_bytes);
-
-            parser.seek(oid_seq.slice.end);
-            const pub_seq = try parser.expect(.context_specific, true, null);
-
-            parser.seek(pub_seq.slice.end);
-
-            try parser.expectEnd(seq.slice.end);
-            try parser.expectEnd(bytes.len);
-
-            return EC.SecretKey.fromBytes(prikey);
+            return Self.parseECSecretKeyDer(bytes, null);
         }
 
         pub fn parseSecretKeyPKCS8Der(bytes: []const u8) !EC.SecretKey {
             var parser = der.Parser{ .bytes = bytes };
-            const seq = try parser.expectSequence();
+            _ = try parser.expectSequence();
 
             const version = try parser.expectInt(u8);
             if (version != 0) {
@@ -138,6 +104,32 @@ pub fn ParseDer(comptime EC: type) type {
 
             const namedcurve_oid = try parser.expectOid();
 
+            parser.seek(oid_seq.slice.end);
+            const prikey_octet = try parser.expect(.universal, false, .octetstring);
+
+            return Self.parseECSecretKeyDer(parser.view(prikey_octet), namedcurve_oid);
+        }
+
+        fn parseECSecretKeyDer(bytes: []const u8, oid: ?[]const u8) !EC.SecretKey {
+            var parser = der.Parser{ .bytes = bytes };
+            _ = try parser.expectSequence();
+
+            const version = try parser.expectInt(u8);
+            if (version != 1) {
+                return error.ECVersionError;
+            }
+
+            const prikey_octet = try parser.expect(.universal, false, .octetstring);
+            const parse_prikey_bytes = parser.view(prikey_octet);
+
+            var namedcurve_oid: []const u8 = "";
+            if (oid) |val| {
+                namedcurve_oid = val;
+            } else {
+                _ = try parser.expect(.context_specific, true, null);
+                namedcurve_oid = parser.expectOid() catch "";
+            }
+
             switch (EC.SecretKey) {
                 ecdsa.EcdsaP256Sha256.SecretKey => {
                     try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_p256_namedcurve);
@@ -145,18 +137,18 @@ pub fn ParseDer(comptime EC: type) type {
                 ecdsa.EcdsaP384Sha384.SecretKey => {
                     try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_p384_namedcurve);
                 },
+                ecdsa.EcdsaSecp256k1Sha256.SecretKey => {
+                    try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_s256_namedcurve);
+                },
                 else => {
                     return error.ErrorNamedCurve;
                 },
             }
 
-            parser.seek(oid_seq.slice.end);
-            const prikey_octet = try parser.expect(.universal, false, .octetstring);
+            var prikey: [EC.SecretKey.encoded_length]u8 = undefined;
+            @memcpy(prikey[0..], parse_prikey_bytes);
 
-            try parser.expectEnd(seq.slice.end);
-            try parser.expectEnd(bytes.len);
-
-            return Self.parseSecretKeyDer(parser.view(prikey_octet));
+            return EC.SecretKey.fromBytes(prikey);
         }
 
         pub fn parsePublicKeyDer(bytes: []const u8) !EC.PublicKey {
@@ -170,12 +162,15 @@ pub fn ParseDer(comptime EC: type) type {
 
             const namedcurve_oid = try parser.expectOid();
 
-            switch (EC.SecretKey) {
-                ecdsa.EcdsaP256Sha256.SecretKey => {
+            switch (EC.PublicKey) {
+                ecdsa.EcdsaP256Sha256.PublicKey => {
                     try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_p256_namedcurve);
                 },
-                ecdsa.EcdsaP384Sha384.SecretKey => {
+                ecdsa.EcdsaP384Sha384.PublicKey => {
                     try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_p384_namedcurve);
+                },
+                ecdsa.EcdsaSecp256k1Sha256.PublicKey => {
+                    try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_s256_namedcurve);
                 },
                 else => {
                     return error.ErrorNamedCurve;
@@ -267,6 +262,30 @@ test "SigningES256 with der pkcs8 key" {
     try testing.expectEqual(true, veri);
 }
 
+test "SigningES256 with der pkcs8 key no namedcurve" {
+    const alloc = std.heap.page_allocator;
+
+    const prikey = "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg02WpZ4lQaQM/PVRB7d4owkuvsuXxrj5vDji8I9zhwNehRANCAAT8yE4hP7yvCEOtDd49SGio7MHlgWd4E6SyCD/HJ0avZVuRkXVobTz6DROHtbuv8EEVuJ/QMQRDxtLVDXAXSYOm";
+    const pubkey = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE/MhOIT+8rwhDrQ3ePUhoqOzB5YFneBOksgg/xydGr2VbkZF1aG08+g0Th7W7r/BBFbif0DEEQ8bS1Q1wF0mDpg==";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    const secret_key = try ParseP256Sha256Der.parseSecretKeyPKCS8Der(prikey_bytes);
+    const public_key = try ParseP256Sha256Der.parsePublicKeyDer(pubkey_bytes);
+
+    const msg = "test-data";
+
+    const h = SigningES256.init(alloc);
+    const signed = try h.sign(msg, secret_key);
+
+    try testing.expectEqual(64, signed.len);
+
+    const veri = h.verify(msg, signed, public_key);
+
+    try testing.expectEqual(true, veri);
+}
+
 test "SigningES384 with der key" {
     const alloc = std.heap.page_allocator;
 
@@ -327,6 +346,30 @@ test "SigningES384 with der pkcs8 key" {
 
     try testing.expectEqual(true, veri);
 
+}
+
+test "SigningES256K with der pkcs8 key no namedcurve" {
+    const alloc = std.heap.page_allocator;
+
+    const prikey = "MIGNAgEAMBAGByqGSM49AgEGBSuBBAAKBHYwdAIBAQQgWG7JTJJajqfBSxfzsmz44+xeJPLQtQwFl7lEEaI9I5mgBwYFK4EEAAqhRANCAAR4OeEraufi3V1WWqc6g1ossT/Y0lucIxFSxLL/P/Rq7OmaOEQtk3uFiAp7CnG9rF9U0gdvy1d+rTQOvHZw5450";
+    const pubkey = "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEeDnhK2rn4t1dVlqnOoNaLLE/2NJbnCMRUsSy/z/0auzpmjhELZN7hYgKewpxvaxfVNIHb8tXfq00Drx2cOeOdA==";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    const secret_key = try ParseSecp256k1Sha256Der.parseSecretKeyPKCS8Der(prikey_bytes);
+    const public_key = try ParseSecp256k1Sha256Der.parsePublicKeyDer(pubkey_bytes);
+
+    const msg = "test-data";
+
+    const h = SigningES256K.init(alloc);
+    const signed = try h.sign(msg, secret_key);
+
+    try testing.expectEqual(64, signed.len);
+
+    const veri = h.verify(msg, signed, public_key);
+
+    try testing.expectEqual(true, veri);
 }
 
 test "SigningES256" {

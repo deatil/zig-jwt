@@ -236,7 +236,7 @@ pub const SecretKey = struct {
 
     pub fn fromPKCS8Der(bytes: []const u8) !SecretKey {
         var parser = der.Parser{ .bytes = bytes };
-        const seq = try parser.expectSequence();
+        _ = try parser.expectSequence();
 
         const version = try parser.expectInt(u8);
         if (version != 0) {
@@ -250,9 +250,6 @@ pub const SecretKey = struct {
 
         parser.seek(oid_seq.slice.end);
         const prikey = try parser.expect(.universal, false, .octetstring);
-
-        try parser.expectEnd(seq.slice.end);
-        try parser.expectEnd(bytes.len);
 
         return SecretKey.fromDer(parser.view(prikey));
     }

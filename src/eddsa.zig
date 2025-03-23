@@ -68,7 +68,7 @@ const oid_eddsa_publickey = "1.3.101.112";
 
 pub fn parseSecretKeyDer(bytes: []const u8) !Ed25519.SecretKey {
     var parser = der.Parser{ .bytes = bytes };
-    const seq = try parser.expectSequence();
+    _ = try parser.expectSequence();
 
     const version = try parser.expectInt(u8);
     if (version != 0) {
@@ -82,9 +82,6 @@ pub fn parseSecretKeyDer(bytes: []const u8) !Ed25519.SecretKey {
 
     parser.seek(oid_seq.slice.end);
     const prikey_octet = try parser.expect(.universal, false, .octetstring);
-
-    try parser.expectEnd(seq.slice.end);
-    try parser.expectEnd(bytes.len);
 
     var prikey_parser = der.Parser{ .bytes = parser.view(prikey_octet) };
     const prikey = try prikey_parser.expect(.universal, false, .octetstring);
