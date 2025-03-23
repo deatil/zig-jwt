@@ -3,6 +3,10 @@ const fmt = std.fmt;
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 
+pub const der = @import("rsa/der.zig");
+pub const oids = @import("rsa/oid.zig");
+pub const utils = @import("utils.zig");
+
 pub const Ed25519 = std.crypto.sign.Ed25519;
 
 pub const SigningEdDSA = SignEdDSA("EdDSA");
@@ -58,6 +62,106 @@ pub fn SignEdDSA(comptime name: []const u8) type {
             return true;
         }
     };
+}
+
+const oid_eddsa_publickey = "1.3.101.112";
+
+pub fn parseSecretKeyDer(bytes: []const u8) !Ed25519.SecretKey {
+    var parser = der.Parser{ .bytes = bytes };
+    const seq = try parser.expectSequence();
+
+    const version = try parser.expectInt(u8);
+    if (version != 0) {
+        return error.PKCS8VersionError;
+    }
+    
+    const oid_seq = try parser.expectSequence();
+    const oid = try parser.expectOid();
+
+    try checkEdDSAPublickeyOid(oid);
+
+    parser.seek(oid_seq.slice.end);
+    const prikey_octet = try parser.expect(.universal, false, .octetstring);
+
+    try parser.expectEnd(seq.slice.end);
+    try parser.expectEnd(bytes.len);
+
+    var prikey_parser = der.Parser{ .bytes = parser.view(prikey_octet) };
+    const prikey = try prikey_parser.expect(.universal, false, .octetstring);
+
+    const parse_prikey_bytes = prikey_parser.view(prikey);
+    if (parse_prikey_bytes.len != Ed25519.KeyPair.seed_length) {
+        return error.ErrorSecretKeyBytesLength;
+    }
+    
+    var seed: [Ed25519.KeyPair.seed_length]u8 = undefined;
+    @memcpy(seed[0..], parse_prikey_bytes);
+
+    const kp = try Ed25519.KeyPair.generateDeterministic(seed);
+
+    return kp.secret_key;
+}
+
+pub fn parsePublicKeyDer(bytes: []const u8) !Ed25519.PublicKey {
+    var parser = der.Parser{ .bytes = bytes };
+    const seq = try parser.expectSequence();
+
+    const oid_seq = try parser.expectSequence();
+    const oid = try parser.expectOid();
+
+    try checkEdDSAPublickeyOid(oid);
+
+    parser.seek(oid_seq.slice.end);
+    const pubkey = try parser.expectBitstring();
+
+    try parser.expectEnd(seq.slice.end);
+    try parser.expectEnd(bytes.len);
+
+    if (pubkey.bytes.len != Ed25519.PublicKey.encoded_length) {
+        return error.ErrorPublicKeyBytesLength;
+    }
+
+    var pubkey_bytes: [Ed25519.PublicKey.encoded_length]u8 = undefined;
+    @memcpy(pubkey_bytes[0..], pubkey.bytes);
+
+    return Ed25519.PublicKey.fromBytes(pubkey_bytes);
+}
+
+fn checkEdDSAPublickeyOid(oid: []const u8) !void {
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    try oids.decode(oid, stream.writer());
+
+    const oid_string = stream.getWritten();
+    if (!std.mem.eql(u8, oid_string, oid_eddsa_publickey)) {
+        return error.EdDSAOidError;
+    }
+
+    return;
+}
+
+test "SigningEdDSA with der key" {
+    const alloc = std.heap.page_allocator;
+
+    const prikey = "MC4CAQAwBQYDK2VwBCIEIE7YvvGJzvKQ3uZOQ6qAPkRsK7nkpmjPOaqsZKqrFQMw";
+    const pubkey = "MCowBQYDK2VwAyEAgbbl7UO5W8ZMmOm+Kw9X2y9PyblBTDcZIRaR/kDFoA0=";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    const secret_key = try parseSecretKeyDer(prikey_bytes);
+    const public_key = try parsePublicKeyDer(pubkey_bytes);
+
+    const msg = "test-data";
+
+    const h = SigningEdDSA.init(alloc);
+    const signed = try h.sign(msg, secret_key);
+
+    try testing.expectEqual(64, signed.len);
+
+    const veri = h.verify(msg, signed, public_key);
+
+    try testing.expectEqual(true, veri);
 }
 
 test "SigningEdDSA" {

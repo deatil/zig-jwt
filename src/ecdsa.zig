@@ -5,9 +5,13 @@ const Allocator = std.mem.Allocator;
 
 pub const ecdsa = std.crypto.sign.ecdsa;
 
+pub const der = @import("rsa/der.zig");
+pub const oids = @import("rsa/oid.zig");
+pub const utils = @import("utils.zig");
+
 pub const SigningES256 = SignECDSA(ecdsa.EcdsaP256Sha256, "ES256");
 pub const SigningES384 = SignECDSA(ecdsa.EcdsaP384Sha384, "ES384");
-// pub const SigningES512 = SignECDSA(ecdsa.EcdsaP512Sha512, "ES512");
+// pub const SigningES512 = SignECDSA(ecdsa.EcdsaP521Sha512, "ES512");
 
 pub const SigningES256K = SignECDSA(ecdsa.EcdsaSecp256k1Sha256, "ES256K");
 
@@ -61,6 +65,268 @@ pub fn SignECDSA(comptime EC: type, comptime name: []const u8) type {
             return true;
         }
     };
+}
+
+const oid_ecdsa_publickey = "1.2.840.10045.2.1";
+const oid_ecdsa_p256_namedcurve = "1.2.840.10045.3.1.7";
+const oid_ecdsa_p384_namedcurve = "1.3.132.0.34";
+const oid_ecdsa_p521_namedcurve = "1.3.132.0.35";
+
+pub const ParseP256Sha256Der = ParseDer(ecdsa.EcdsaP256Sha256);
+pub const ParseP384Sha384Der = ParseDer(ecdsa.EcdsaP384Sha384);
+// pub const ParseP521Sha512Der = ParseDer(ecdsa.EcdsaP521Sha512);
+
+// parse der key
+pub fn ParseDer(comptime EC: type) type {
+    return struct {
+        const Self = @This();
+
+        pub fn parseSecretKeyDer(bytes: []const u8) !EC.SecretKey {
+            var parser = der.Parser{ .bytes = bytes };
+            const seq = try parser.expectSequence();
+
+            const version = try parser.expectInt(u8);
+            if (version != 1) {
+                return error.ECVersionError;
+            }
+
+            const prikey_octet = try parser.expect(.universal, false, .octetstring);
+            const parse_prikey_bytes = parser.view(prikey_octet);
+
+            const oid_seq = try parser.expect(.context_specific, true, null);
+            const oid = try parser.expectOid();
+
+            switch (EC.SecretKey) {
+                ecdsa.EcdsaP256Sha256.SecretKey => {
+                    try checkECDSAPublickeyNamedCurveOid(oid, oid_ecdsa_p256_namedcurve);
+                },
+                ecdsa.EcdsaP384Sha384.SecretKey => {
+                    try checkECDSAPublickeyNamedCurveOid(oid, oid_ecdsa_p384_namedcurve);
+                },
+                else => {
+                    return error.ErrorNamedCurve;
+                },
+            }
+
+            var prikey: [EC.SecretKey.encoded_length]u8 = undefined;
+            @memcpy(prikey[0..], parse_prikey_bytes);
+
+            parser.seek(oid_seq.slice.end);
+            const pub_seq = try parser.expect(.context_specific, true, null);
+
+            parser.seek(pub_seq.slice.end);
+
+            try parser.expectEnd(seq.slice.end);
+            try parser.expectEnd(bytes.len);
+
+            return EC.SecretKey.fromBytes(prikey);
+        }
+
+        pub fn parseSecretKeyPKCS8Der(bytes: []const u8) !EC.SecretKey {
+            var parser = der.Parser{ .bytes = bytes };
+            const seq = try parser.expectSequence();
+
+            const version = try parser.expectInt(u8);
+            if (version != 0) {
+                return error.ECVersionError;
+            }
+
+            const oid_seq = try parser.expectSequence();
+            const oid = try parser.expectOid();
+
+            try checkECDSAPublickeyOid(oid);
+
+            const namedcurve_oid = try parser.expectOid();
+
+            switch (EC.SecretKey) {
+                ecdsa.EcdsaP256Sha256.SecretKey => {
+                    try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_p256_namedcurve);
+                },
+                ecdsa.EcdsaP384Sha384.SecretKey => {
+                    try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_p384_namedcurve);
+                },
+                else => {
+                    return error.ErrorNamedCurve;
+                },
+            }
+
+            parser.seek(oid_seq.slice.end);
+            const prikey_octet = try parser.expect(.universal, false, .octetstring);
+
+            try parser.expectEnd(seq.slice.end);
+            try parser.expectEnd(bytes.len);
+
+            return Self.parseSecretKeyDer(parser.view(prikey_octet));
+        }
+
+        pub fn parsePublicKeyDer(bytes: []const u8) !EC.PublicKey {
+            var parser = der.Parser{ .bytes = bytes };
+            const seq = try parser.expectSequence();
+
+            const oid_seq = try parser.expectSequence();
+            const oid = try parser.expectOid();
+
+            try checkECDSAPublickeyOid(oid);
+
+            const namedcurve_oid = try parser.expectOid();
+
+            switch (EC.SecretKey) {
+                ecdsa.EcdsaP256Sha256.SecretKey => {
+                    try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_p256_namedcurve);
+                },
+                ecdsa.EcdsaP384Sha384.SecretKey => {
+                    try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_p384_namedcurve);
+                },
+                else => {
+                    return error.ErrorNamedCurve;
+                },
+            }
+
+            parser.seek(oid_seq.slice.end);
+            const pubkey = try parser.expectBitstring();
+
+            try parser.expectEnd(seq.slice.end);
+            try parser.expectEnd(bytes.len);
+
+            return EC.PublicKey.fromSec1(pubkey.bytes);
+        }
+    };
+}
+
+fn checkECDSAPublickeyOid(oid: []const u8) !void {
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    try oids.decode(oid, stream.writer());
+
+    const oid_string = stream.getWritten();
+    if (!std.mem.eql(u8, oid_string, oid_ecdsa_publickey)) {
+        return error.ECDSAOidError;
+    }
+
+    return;
+}
+
+fn checkECDSAPublickeyNamedCurveOid(oid: []const u8, namedcurve_oid: []const u8) !void {
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    try oids.decode(oid, stream.writer());
+
+    const oid_string = stream.getWritten();
+    if (!std.mem.eql(u8, oid_string, namedcurve_oid)) {
+        return error.ECDSAOidError;
+    }
+
+    return;
+}
+
+test "SigningES256 with der key" {
+    const alloc = std.heap.page_allocator;
+
+    const prikey = "MHcCAQEEIEhYoZNv+yhRKnM2+SCgUzi9qH9dWM4MrqMQAKGOpqdpoAoGCCqGSM49AwEHoUQDQgAE9mdkEmwCjAkiIpa+MyWK7LqwZZWMv2Ft6eNXAKIFAaY11SaJBqLYIVCzewGQv/7yKkChKBDx6dvgfxR0Qm2EKw==";
+    const pubkey = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE9mdkEmwCjAkiIpa+MyWK7LqwZZWMv2Ft6eNXAKIFAaY11SaJBqLYIVCzewGQv/7yKkChKBDx6dvgfxR0Qm2EKw==";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    const secret_key = try ParseP256Sha256Der.parseSecretKeyDer(prikey_bytes);
+    const public_key = try ParseP256Sha256Der.parsePublicKeyDer(pubkey_bytes);
+
+    const msg = "test-data";
+
+    const h = SigningES256.init(alloc);
+    const signed = try h.sign(msg, secret_key);
+
+    try testing.expectEqual(64, signed.len);
+
+    const veri = h.verify(msg, signed, public_key);
+
+    try testing.expectEqual(true, veri);
+}
+
+test "SigningES256 with der pkcs8 key" {
+    const alloc = std.heap.page_allocator;
+
+    const prikey = "MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQgYwnjpvkTGLLhlf+eJ0XdvbW975d4Y0ntypkpzuvfBL2gCgYIKoZIzj0DAQehRANCAAQwgtPll6KemOFTbbsjt2IohhDKpXVQ5O14hDjHmWd7hWKBn5pFQGqF3OVz6ulEShHYDOgEm8Sd4jRglFtYyRhI";
+    const pubkey = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEMILT5ZeinpjhU227I7diKIYQyqV1UOTteIQ4x5lne4VigZ+aRUBqhdzlc+rpREoR2AzoBJvEneI0YJRbWMkYSA==";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    const secret_key = try ParseP256Sha256Der.parseSecretKeyPKCS8Der(prikey_bytes);
+    const public_key = try ParseP256Sha256Der.parsePublicKeyDer(pubkey_bytes);
+
+    const msg = "test-data";
+
+    const h = SigningES256.init(alloc);
+    const signed = try h.sign(msg, secret_key);
+
+    try testing.expectEqual(64, signed.len);
+
+    const veri = h.verify(msg, signed, public_key);
+
+    try testing.expectEqual(true, veri);
+}
+
+test "SigningES384 with der key" {
+    const alloc = std.heap.page_allocator;
+
+    const prikey = "MIGkAgEBBDDqWgdCzllebram3uEH+cbKAjsu5xHwL/kZa97cfTJVdZ4j+IMj99PHZkdfxli2vo2gBwYFK4EEACKhZANiAAS5Zzmt6BAsk5mfpCqYBXK3PVy8Vgvkof3+8XLoRpq04PjnwLtdtY/M5pnMxsyWbIRbZHtB8Qkeb71EF+jg7WAtb9B013H1rvlbtVXu0uCmUE3J8hQ3EqY6ugmwqUUhi0M=";
+    const pubkey = "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEuWc5regQLJOZn6QqmAVytz1cvFYL5KH9/vFy6EaatOD458C7XbWPzOaZzMbMlmyEW2R7QfEJHm+9RBfo4O1gLW/QdNdx9a75W7VV7tLgplBNyfIUNxKmOroJsKlFIYtD";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    const secret_key = try ParseP384Sha384Der.parseSecretKeyDer(prikey_bytes);
+    const public_key = try ParseP384Sha384Der.parsePublicKeyDer(pubkey_bytes);
+
+    const h = SigningES384.init(alloc);
+
+    const alg = h.alg();
+    const signLength = h.signLength();
+    try testing.expectEqual(96, signLength);
+    try testing.expectEqualStrings("ES384", alg);
+
+    const msg = "test-data";
+
+    const signed = try h.sign(msg, secret_key);
+
+    try testing.expectEqual(96, signed.len);
+
+    const veri = h.verify(msg, signed, public_key);
+
+    try testing.expectEqual(true, veri);
+
+}
+
+test "SigningES384 with der pkcs8 key" {
+    const alloc = std.heap.page_allocator;
+
+    const prikey = "MIG/AgEAMBAGByqGSM49AgEGBSuBBAAiBIGnMIGkAgEBBDBzeDiOINSYF7z6egMEwI8qhBIhJYnVE3ShVdjkuYXg68PlRdWHuX+CEYIvxxpKlSWgBwYFK4EEACKhZANiAATQsy+6e9r88AuK1JBLC9URXg6ErKA3s2WoHM4LorWFmZl6klPlB+9k/hhjQWqt4GpRqBZV8Zhp2KXcthY2TdNDbrtMwv/zKZ+pSsugZo13wwLIX8i1h3SHLt4BoCTapUE=";
+    const pubkey = "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE0LMvunva/PALitSQSwvVEV4OhKygN7NlqBzOC6K1hZmZepJT5QfvZP4YY0FqreBqUagWVfGYadil3LYWNk3TQ267TML/8ymfqUrLoGaNd8MCyF/ItYd0hy7eAaAk2qVB";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    const secret_key = try ParseP384Sha384Der.parseSecretKeyPKCS8Der(prikey_bytes);
+    const public_key = try ParseP384Sha384Der.parsePublicKeyDer(pubkey_bytes);
+
+    const h = SigningES384.init(alloc);
+
+    const alg = h.alg();
+    const signLength = h.signLength();
+    try testing.expectEqual(96, signLength);
+    try testing.expectEqualStrings("ES384", alg);
+
+    const msg = "test-data";
+
+    const signed = try h.sign(msg, secret_key);
+
+    try testing.expectEqual(96, signed.len);
+
+    const veri = h.verify(msg, signed, public_key);
+
+    try testing.expectEqual(true, veri);
+
 }
 
 test "SigningES256" {
