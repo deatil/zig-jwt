@@ -348,7 +348,7 @@ test "SigningES384 with der pkcs8 key" {
 
 }
 
-test "SigningES256K with der pkcs8 key no namedcurve" {
+test "SigningES256K with der pkcs8 key" {
     const alloc = std.heap.page_allocator;
 
     const prikey = "MIGNAgEAMBAGByqGSM49AgEGBSuBBAAKBHYwdAIBAQQgWG7JTJJajqfBSxfzsmz44+xeJPLQtQwFl7lEEaI9I5mgBwYFK4EEAAqhRANCAAR4OeEraufi3V1WWqc6g1ossT/Y0lucIxFSxLL/P/Rq7OmaOEQtk3uFiAp7CnG9rF9U0gdvy1d+rTQOvHZw5450";
