@@ -169,7 +169,10 @@ pub fn ParseKeyDer(comptime EC: type) type {
             if (oid) |val| {
                 namedcurve_oid = val;
             } else {
-                _ = try parser.expect(.context_specific, true, null);
+                const oid_seq = try parser.expect(.context_specific, true, null);
+                if (@intFromEnum(oid_seq.identifier.tag) != 0) {
+                    return error.ErrorOidTagSeq;
+                }
                 namedcurve_oid = parser.expectOid() catch "";
             }
 
