@@ -22,6 +22,8 @@ pub const PublicKey = struct {
     n: Modulus,
     e: Fe,
 
+    const Self = @This();
+
     pub fn fromBytes(mod: []const u8, exp: []const u8) !PublicKey {
         const n = try Modulus.fromBytes(mod, .big);
         if (n.bits() <= 512) return error.InsecureBitCount;
@@ -75,10 +77,18 @@ pub const PublicKey = struct {
         return PublicKey.fromDer(pubkey.bytes);
     }
 
+    pub fn fromDerAuto(bytes: []const u8) !PublicKey {
+        const sk = Self.fromPKCS8Der(bytes) catch {
+            return Self.fromDer(bytes);
+        };
+
+        return sk;
+    } 
+
     /// Encrypt a short message using RSAES-PKCS1-v1_5.
-    pub fn encryptPkcsv1_5(pk: PublicKey, msg: []const u8, out: []u8) ![]const u8 {
+    pub fn encryptPkcsv1_5(self: Self, msg: []const u8, out: []u8) ![]const u8 {
         // align variable names with spec
-        const k = byteLen(pk.n.bits());
+        const k = byteLen(self.n.bits());
         if (out.len < k) return error.BufferTooSmall;
         if (msg.len > k - 11) return error.MessageTooLong;
 
@@ -97,22 +107,22 @@ pub const PublicKey = struct {
         em[em.len - msg.len - 1] = 0;
         @memcpy(em[em.len - msg.len ..][0..msg.len], msg);
 
-        const m = try Fe.fromBytes(pk.n, em, .big);
-        const e = try pk.n.powPublic(m, pk.e);
+        const m = try Fe.fromBytes(self.n, em, .big);
+        const e = try self.n.powPublic(m, self.e);
         try e.toBytes(em, .big);
         return em;
     }
 
     /// Encrypt a short message using Optimal Asymmetric Encryption Padding (RSAES-OAEP).
     pub fn encryptOaep(
-        pk: PublicKey,
+        self: Self,
         comptime Hash: type,
         msg: []const u8,
         label: []const u8,
         out: []u8,
     ) ![]const u8 {
         // align variable names with spec
-        const k = byteLen(pk.n.bits());
+        const k = byteLen(self.n.bits());
         if (out.len < k) return error.BufferTooSmall;
 
         if (msg.len > k - 2 * Hash.digest_length - 2) return error.MessageTooLong;
@@ -139,8 +149,8 @@ pub const PublicKey = struct {
         const seed_mask = mgf1(Hash, db, mgf_buf[0..seed.len]);
         for (seed, seed_mask) |*v, m| v.* ^= m;
 
-        const m = try Fe.fromBytes(pk.n, em, .big);
-        const e = try pk.n.powPublic(m, pk.e);
+        const m = try Fe.fromBytes(self.n, em, .big);
+        const e = try self.n.powPublic(m, self.e);
         try e.toBytes(em, .big);
         return em;
     }
@@ -154,6 +164,8 @@ pub const SecretKey = struct {
     // Precomputed contains precomputed values that speed up private
     // operations, if available.
     precomputed: ?PrecomputedValues = null,
+
+    const Self = @This();
 
     pub fn fromBytes(n: []const u8, e: []const u8, dbytes: []const u8, p: Fe, q: Fe) !SecretKey {
         const public = try PublicKey.fromBytes(n, e);
@@ -254,14 +266,22 @@ pub const SecretKey = struct {
         return SecretKey.fromDer(parser.view(prikey));
     }
 
-    pub fn decryptPkcsv1_5(secret_key: SecretKey, ciphertext: []const u8, out: []u8) ![]const u8 {
-        const k = byteLen(secret_key.public_key.n.bits());
+    pub fn fromDerAuto(bytes: []const u8) !SecretKey {
+        const sk = Self.fromPKCS8Der(bytes) catch {
+            return Self.fromDer(bytes);
+        };
+
+        return sk;
+    } 
+
+    pub fn decryptPkcsv1_5(self: Self, ciphertext: []const u8, out: []u8) ![]const u8 {
+        const k = byteLen(self.public_key.n.bits());
         if (out.len < k) return error.BufferTooSmall;
 
         const em = out[0..k];
 
-        const m = try Fe.fromBytes(secret_key.public_key.n, ciphertext, .big);
-        const e = try secret_key.public_key.n.pow(m, secret_key.d);
+        const m = try Fe.fromBytes(self.public_key.n, ciphertext, .big);
+        const e = try self.public_key.n.pow(m, self.d);
         try e.toBytes(em, .big);
 
         // Care shall be taken to ensure that an opponent cannot
@@ -277,18 +297,18 @@ pub const SecretKey = struct {
     }
 
     pub fn decryptOaep(
-        secret_key: SecretKey,
+        self: Self,
         comptime Hash: type,
         ciphertext: []const u8,
         label: []const u8,
         out: []u8,
     ) ![]u8 {
         // align variable names with spec
-        const k = byteLen(secret_key.public_key.n.bits());
+        const k = byteLen(self.public_key.n.bits());
         if (out.len < k) return error.BufferTooSmall;
 
-        const mod = try Fe.fromBytes(secret_key.public_key.n, ciphertext, .big);
-        const exp = secret_key.public_key.n.pow(mod, secret_key.d) catch unreachable;
+        const mod = try Fe.fromBytes(self.public_key.n, ciphertext, .big);
+        const exp = self.public_key.n.pow(mod, self.d) catch unreachable;
         const em = out[0..k];
         try exp.toBytes(em, .big);
 
@@ -319,37 +339,37 @@ pub const SecretKey = struct {
     }
 
     /// decrypt short plaintext with secret key.
-    pub fn decrypt(secret_key: SecretKey, plaintext: []const u8, out: []u8) !void {
-        const n = secret_key.public_key.n;
+    pub fn decrypt(self: Self, plaintext: []const u8, out: []u8) !void {
+        const n = self.public_key.n;
         const k = byteLen(n.bits());
         if (plaintext.len > k) {
             return error.MessageTooLong;
         }
 
         const msg_as_int = try Fe.fromBytes(n, plaintext, .big);
-        const enc_as_int = try n.pow(msg_as_int, secret_key.d);
+        const enc_as_int = try n.pow(msg_as_int, self.d);
         try enc_as_int.toBytes(out, .big);
     }
 
-    pub fn validate(secret_key: SecretKey) !void {
-        _ = secret_key;
+    pub fn validate(self: Self) !void {
+        _ = self;
     }
 
     // Precompute performs some calculations that speed up private key operations
     // in the future.
-    pub fn precompute(secret_key: *SecretKey) !void {
-        if (secret_key.precomputed != null) {
+    pub fn precompute(self: *Self) !void {
+        if (self.precomputed != null) {
             return;
         }
 
         const big_one = Modulus.one();
         const big_zero = Modulus.zero;
 
-        var dp = try Modulus.fromUint(secret_key.d).sub(secret_key.primes[0], big_one);
-        dp = try Modulus.fromUint(dp).add(secret_key.d, big_zero);
+        var dp = try Modulus.fromUint(self.d).sub(self.primes[0], big_one);
+        dp = try Modulus.fromUint(dp).add(self.d, big_zero);
 
-        var dq = try Modulus.fromUint(secret_key.d).sub(secret_key.primes[1], big_one);
-        dq = try Modulus.fromUint(dq).add(secret_key.d, big_zero);
+        var dq = try Modulus.fromUint(self.d).sub(self.primes[1], big_one);
+        dq = try Modulus.fromUint(dq).add(self.d, big_zero);
 
         const qinv = Modulus.one();
 
@@ -372,13 +392,15 @@ pub const SecretKey = struct {
             },
         };
 
-        secret_key.precomputed = precomputed;
+        self.precomputed = precomputed;
     }
 };
 
 pub const KeyPair = struct {
     public_key: PublicKey,
     secret_key: SecretKey,
+
+    const Self = @This();
 
     /// Return the public key corresponding to the secret key.
     pub fn fromSecretKey(secret_key: SecretKey) !KeyPair {
@@ -388,31 +410,31 @@ pub const KeyPair = struct {
         };
     }
 
-    pub fn signPkcsv1_5(kp: KeyPair, comptime Hash: type, msg: []const u8, out: []u8) !PKCS1v1_5(Hash).Signature {
-        var st = try signerPkcsv1_5(kp, Hash);
+    pub fn signPkcsv1_5(self: Self, comptime Hash: type, msg: []const u8, out: []u8) !PKCS1v1_5(Hash).Signature {
+        var st = try self.signerPkcsv1_5(Hash);
         st.update(msg);
         return st.finalize(out);
     }
 
-    pub fn signerPkcsv1_5(kp: KeyPair, comptime Hash: type) !PKCS1v1_5(Hash).Signer {
-        return PKCS1v1_5(Hash).Signer.init(kp.secret_key);
+    pub fn signerPkcsv1_5(self: Self, comptime Hash: type) !PKCS1v1_5(Hash).Signer {
+        return PKCS1v1_5(Hash).Signer.init(self.secret_key);
     }
 
     pub fn signOaep(
-        kp: KeyPair,
+        self: Self,
         comptime Hash: type,
         msg: []const u8,
         salt: ?[]const u8,
         out: []u8, 
     ) !Pss(Hash).Signature {
-        var st = try signerOaep(kp, Hash, salt);
+        var st = try self.signerOaep(Hash, salt);
         st.update(msg);
         return st.finalize(out);
     }
 
     /// Salt must outlive returned `PSS.Signer`.
-    pub fn signerOaep(kp: KeyPair, comptime Hash: type, salt: ?[]const u8) !Pss(Hash).Signer {
-        return Pss(Hash).Signer.init(kp.secret_key, salt);
+    pub fn signerOaep(self: Self, comptime Hash: type, salt: ?[]const u8) !Pss(Hash).Signer {
+        return Pss(Hash).Signer.init(self.secret_key, salt);
     }
 
 };
@@ -485,6 +507,8 @@ pub fn PKCS1v1_5(comptime Hash: type) type {
             h: Hash,
             secret_key: SecretKey,
 
+            const Self = @This();
+
             pub fn init(secret_key: SecretKey) Signer {
                 return .{
                     .h = Hash.init(.{}),
@@ -492,17 +516,17 @@ pub fn PKCS1v1_5(comptime Hash: type) type {
                 };
             }
 
-            pub fn update(self: *Signer, data: []const u8) void {
+            pub fn update(self: *Self, data: []const u8) void {
                 self.h.update(data);
             }
 
-            pub fn finalize(self: *Signer, out: []u8) !PkcsT.Signature {
+            pub fn finalize(self: *Self, out: []u8) !PkcsT.Signature {
                 const k = byteLen(self.secret_key.public_key.n.bits());
 
                 var hash: [Hash.digest_length]u8 = undefined;
                 self.h.final(&hash);
 
-                const em = try emsaEncode(hash, out[0..k]);
+                const em = try PkcsT.emsaEncode(hash, out[0..k]);
 
                 try self.secret_key.decrypt(em, em);
 
@@ -515,6 +539,8 @@ pub fn PKCS1v1_5(comptime Hash: type) type {
             sig: []u8,
             public_key: PublicKey,
 
+            const Self = @This();
+
             fn init(sig: PkcsT.Signature, public_key: PublicKey) Verifier {
                 return Verifier{
                     .h = Hash.init(.{}),
@@ -523,11 +549,11 @@ pub fn PKCS1v1_5(comptime Hash: type) type {
                 };
             }
 
-            pub fn update(self: *Verifier, data: []const u8) void {
+            pub fn update(self: *Self, data: []const u8) void {
                 self.h.update(data);
             }
 
-            pub fn verify(self: *Verifier) !void {
+            pub fn verify(self: *Self) !void {
                 const pk = self.public_key;
                 const s = try Fe.fromBytes(pk.n, self.sig, .big);
                 const emm = try pk.n.powPublic(s, pk.e);
@@ -541,7 +567,7 @@ pub fn PKCS1v1_5(comptime Hash: type) type {
 
                 var em_buf2: [max_modulus_len]u8 = undefined;
                 const em2 = em_buf2[0..byteLen(pk.n.bits())];
-                const expected = try emsaEncode(hash, em2);
+                const expected = try PkcsT.emsaEncode(hash, em2);
 
                 if (!std.mem.eql(u8, expected, em)) {
                     return error.Inconsistent;
@@ -551,7 +577,7 @@ pub fn PKCS1v1_5(comptime Hash: type) type {
 
         /// PKCS Encrypted Message Signature Appendix
         fn emsaEncode(hash: [Hash.digest_length]u8, out: []u8) ![]u8 {
-            const digest_header = comptime digestHeader();
+            const digest_header = comptime PkcsT.digestHeader();
             const tLen = digest_header.len + Hash.digest_length;
             const emLen = out.len;
             if (emLen < tLen + 11) return error.ModulusTooShort;
@@ -570,7 +596,6 @@ pub fn PKCS1v1_5(comptime Hash: type) type {
         }
 
         /// DER encoded header. Sequence of digest algo + digest.
-        /// TODO: use a DER encoder instead
         fn digestHeader() []const u8 {
             const sha2 = std.crypto.hash.sha2;
             // Section 9.2 Notes 1.
@@ -614,6 +639,8 @@ pub fn Pss(comptime Hash: type) type {
     const default_salt_len = Hash.digest_length;
 
     return struct {
+        const PssT = @This();
+
         pub const Signature = struct {
             bytes: []u8,
 
@@ -642,12 +669,12 @@ pub fn Pss(comptime Hash: type) type {
             }
         };
 
-        const PssT = @This();
-
         pub const Signer = struct {
             h: Hash,
             secret_key: SecretKey,
             salt: ?[]const u8,
+
+            const Self = @This();
 
             pub fn init(secret_key: SecretKey, salt: ?[]const u8) Signer {
                 return .{
@@ -657,11 +684,11 @@ pub fn Pss(comptime Hash: type) type {
                 };
             }
 
-            pub fn update(self: *Signer, data: []const u8) void {
+            pub fn update(self: *Self, data: []const u8) void {
                 self.h.update(data);
             }
 
-            pub fn finalize(self: *Signer, out: []u8) !PssT.Signature {
+            pub fn finalize(self: *Self, out: []u8) !PssT.Signature {
                 var hashed: [Hash.digest_length]u8 = undefined;
                 self.h.final(&hashed);
 
@@ -672,7 +699,7 @@ pub fn Pss(comptime Hash: type) type {
                 };
 
                 const em_bits = self.secret_key.public_key.n.bits() - 1;
-                const em = try emsaPSSEncode(hashed, salt, em_bits, out);
+                const em = try PssT.emsaPSSEncode(hashed, salt, em_bits, out);
 
                 try self.secret_key.decrypt(em, em);
 
@@ -686,6 +713,8 @@ pub fn Pss(comptime Hash: type) type {
             public_key: PublicKey,
             salt_len: usize,
 
+            const Self = @This();
+
             fn init(sig: PssT.Signature, public_key: PublicKey, salt_len: usize) Verifier {
                 return Verifier{
                     .h = Hash.init(.{}),
@@ -695,11 +724,11 @@ pub fn Pss(comptime Hash: type) type {
                 };
             }
 
-            pub fn update(self: *Verifier, data: []const u8) void {
+            pub fn update(self: *Self, data: []const u8) void {
                 self.h.update(data);
             }
 
-            pub fn verify(self: *Verifier) !void {
+            pub fn verify(self: *Self) !void {
                 const pk = self.public_key;
 
                 var em_buf: [max_modulus_len]u8 = undefined;
@@ -715,7 +744,7 @@ pub fn Pss(comptime Hash: type) type {
                 self.h.final(&mHash);
 
                 const mod_bits = self.public_key.n.bits();
-                try emsaPSSVerify(&mHash, em, mod_bits - 1, self.salt_len);
+                try PssT.emsaPSSVerify(&mHash, em, mod_bits - 1, self.salt_len);
             }
         };
 
@@ -1237,6 +1266,47 @@ test "Signer with pkcs8 key" {
 
     const pri_key = try SecretKey.fromPKCS8Der(prikey_bytes);
     const pub_key = try PublicKey.fromPKCS8Der(pubkey_bytes);
+
+    const msg = "rsa PSS signature";
+    var out: [max_modulus_len]u8 = undefined;
+
+    var sig = Pss(TestHash).Signer.init(pri_key, null);
+    sig.update(msg);
+    const signed = try sig.finalize(&out);
+
+    const signed_bytes = signed.toBytes();
+    try testing.expectEqual(true, signed_bytes.len > 0);
+
+    try signed.verify(msg, pub_key, null);
+
+}
+
+test "Signer with pkcs8 key or pkcs1 key" {
+    {
+        // pkcs1 der key
+        const prikey = "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq";
+        const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
+
+        try test_sign_with_key_der(prikey, pubkey);
+    }
+
+    {
+        // pkcs8 der key
+        const prikey = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDh/nCDmXaEqxN416b9XjV8acmbqA52uPzKbesWQRT/BPxEO2dKAURk5CkcSBDskvfzFR9TRjeDppjD1BPSEnuYKnP0SvmotoxcnBnHMfMBqGV8DSJyppu8k4y9C3MPq5C/rA8TJm0NNaJCL0BfAGkeyw+elgYifbRlm42VfYGsKVyIeEI9Qghk5Cf8yapMPfWNLKOhChXsyGExMBMonHZeseFH7UNwonNAFJMAaelhVqqmwBFqn6fBGKmvedRO7HIaiEFNKaMna6xJ5Bccjds4MhF7UC5PIdx4Bt7CfxvjrbIRYoBF2l30CNBblIhU992zPkHoaVhDkt1gq3OdO7LvAgMBAAECggEBALCJrWTv7ahnZ3efpqAIBuogTVBd8KaHjVmokds5jehFAbdfXClwYfgaT477MNVNXYmzN1w63sTl0DIxqiYRMCFHEHuGUg6cQ3tYqb50Y2spG9XTANTlF4UxEeDfX8ue7xz7kG8aNlf6TL084iEUVgmrAJGWikZJQjGZWPmtKC3OTeJY5Bev5qHVuMRe+XEM5aQc3ph+lXlOF0Qp0Eg8YRWprrev2faH6prMqu2JGomoac6sfM4QJhtEViF7Gw0XPthPTbF19IefuAwi9psMM/9CnQ+MTWN2i6IxoUdicsFuC+Wdlb3K5V/+uldNSr+ePEhcya+YTLK9IOcVwWKQHykCgYEA8XvuEribf+t0ZPtfxr+DC9nZHXbVoFx0/ARpSG+P/fp3Hn3rO9iYQ6OtZ9mEXTzf+dhYTaRWq6PbCOz6i0It+J8QSBdxU9OcQ4871mDe41IvSc1CCGMW4PeIYtNQEK0zrqhN7SMtKyUd7yAsYRCrIzMc7NjE2qJvFw5kh7xC3Q0CgYEA75Qjn5daNYSAOa/ILdOs5J/8oIaO27RNK/fSKm/btsMsyum8+YP/mWmm1MXBzG9WEKzZv5yEKOWCEVJYVsFQsGt9yLYW2WIKU5UxiuU0F1RImF/dphIbYOh7oGC3WfYKk2f+K7ftjc196ZkEkDuE2Xh1h75/67Mzztx1DbXj6OsCgYBcDRfFfyWXb5Og4smxo1M680H2H1RzmorlfnD7sbs733wE3Y8L8xanwf7Z9WqleA0Q2k1e22RGbWGTV3JyHzoS6d90+6qxf5qzjigLIkYUdUGdambfd5ZDD1ioA1Ej6kInM/TwjlYreiyc+LCyF36FHnjKOB9iEEU0jsH3k+YRCQKBgHMVLPuHX6zfhhyvxK/Gw4FbHKYbnNoKxRs+wvThoKAtJwIdv0n4TzppVttUV2CVhrkh3sM9MvrWLGGXtZmO6Oyl5dkZJuarQpydyRuYOCqQsQKI4lbY0c/+PQxwCQMsvi3KwXxMsM7yC+6/M0L5ZDp2s7ZOGvKktVlD6vJ4Eg+bAoGARnGGprSBW8dAb/s53r0paPh4k/bySrXdGEprLwk6g3S8+aylcmjUdjcIq4dEb4A/nv12dx1Sc4y99c62R0zi+TT6FYBIFDMz3HNVzO0Jr6SgC6CNVotL0D725CioR5U1NyTHHRLZth69HLuEZCZQlPJCbePXMRRHmOl1svzcVuo=";
+        const pubkey = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
+
+        try test_sign_with_key_der(prikey, pubkey);
+    }
+}
+
+fn test_sign_with_key_der(prikey: []const u8, pubkey: []const u8) !void {
+    const alloc = std.heap.page_allocator;
+
+    const prikey_bytes = try base64Decode(alloc, prikey);
+    const pubkey_bytes = try base64Decode(alloc, pubkey);
+
+    const pri_key = try SecretKey.fromDerAuto(prikey_bytes);
+    const pub_key = try PublicKey.fromDerAuto(pubkey_bytes);
 
     const msg = "rsa PSS signature";
     var out: [max_modulus_len]u8 = undefined;
