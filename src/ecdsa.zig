@@ -129,7 +129,7 @@ pub fn ParseKeyDer(comptime EC: type) type {
 
             const version = try parser.expectInt(u8);
             if (version != 0) {
-                return error.ErrorPKCS8Version;
+                return error.PKCS8VersionError;
             }
 
             const oid_seq = try parser.expectSequence();
