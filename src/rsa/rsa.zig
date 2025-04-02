@@ -78,11 +78,11 @@ pub const PublicKey = struct {
     }
 
     pub fn fromDerAuto(bytes: []const u8) !PublicKey {
-        const sk = Self.fromPKCS8Der(bytes) catch {
+        const pk = Self.fromPKCS8Der(bytes) catch {
             return Self.fromDer(bytes);
         };
 
-        return sk;
+        return pk;
     } 
 
     /// Encrypt a short message using RSAES-PKCS1-v1_5.

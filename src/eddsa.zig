@@ -88,7 +88,7 @@ pub fn parseSecretKeyDer(bytes: []const u8) !Ed25519.SecretKey {
 
     const parse_prikey_bytes = prikey_parser.view(prikey);
     if (parse_prikey_bytes.len != Ed25519.KeyPair.seed_length) {
-        return error.ErrorSecretKeyBytesLength;
+        return error.SecretKeyBytesLengthError;
     }
     
     var seed: [Ed25519.KeyPair.seed_length]u8 = undefined;
@@ -115,7 +115,7 @@ pub fn parsePublicKeyDer(bytes: []const u8) !Ed25519.PublicKey {
     try parser.expectEnd(bytes.len);
 
     if (pubkey.bytes.len != Ed25519.PublicKey.encoded_length) {
-        return error.ErrorPublicKeyBytesLength;
+        return error.PublicKeyBytesLengthError;
     }
 
     var pubkey_bytes: [Ed25519.PublicKey.encoded_length]u8 = undefined;

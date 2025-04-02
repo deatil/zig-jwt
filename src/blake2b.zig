@@ -32,7 +32,7 @@ pub fn SignBlake2b(comptime Hash: type, comptime name: []const u8) type {
 
         pub fn sign(self: Self, msg: []const u8, key: []const u8) ![]u8 {
             if (key.len * 8 < 256) {
-                return error.JWTKeyTooShort;
+                return error.KeyTooShort;
             }
 
             var out: [digest_length]u8 = undefined;
@@ -115,7 +115,7 @@ test "SigningBlake2b key short" {
     var need_true: bool = false;
     _ = h.sign(msg, key) catch |err| {
         need_true = true;
-        try testing.expectEqual(error.JWTKeyTooShort, err);
+        try testing.expectEqual(error.KeyTooShort, err);
     };
     try testing.expectEqual(true, need_true);
 

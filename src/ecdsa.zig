@@ -106,7 +106,7 @@ pub fn ParseKeyDer(comptime EC: type) type {
                     try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_s256_namedcurve);
                 },
                 else => {
-                    return error.ErrorNamedCurve;
+                    return error.NamedCurveNotSupport;
                 },
             }
 
@@ -129,7 +129,7 @@ pub fn ParseKeyDer(comptime EC: type) type {
 
             const version = try parser.expectInt(u8);
             if (version != 0) {
-                return error.ECVersionError;
+                return error.ErrorPKCS8Version;
             }
 
             const oid_seq = try parser.expectSequence();
@@ -171,7 +171,7 @@ pub fn ParseKeyDer(comptime EC: type) type {
             } else {
                 const oid_seq = try parser.expect(.context_specific, true, null);
                 if (@intFromEnum(oid_seq.identifier.tag) != 0) {
-                    return error.ErrorOidTagSeq;
+                    return error.OidTagSeqError;
                 }
                 namedcurve_oid = parser.expectOid() catch "";
             }
@@ -187,7 +187,7 @@ pub fn ParseKeyDer(comptime EC: type) type {
                     try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_s256_namedcurve);
                 },
                 else => {
-                    return error.ErrorNamedCurve;
+                    return error.NamedCurveNotSupport;
                 },
             }
 
@@ -219,7 +219,7 @@ fn checkECDSAPublickeyNamedCurveOid(oid: []const u8, namedcurve_oid: []const u8)
 
     const oid_string = stream.getWritten();
     if (!std.mem.eql(u8, oid_string, namedcurve_oid)) {
-        return error.ECDSAOidError;
+        return error.NamedcurveOidNotSupport;
     }
 
     return;
