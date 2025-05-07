@@ -4,7 +4,7 @@ const testing = std.testing;
 const blake2 = std.crypto.hash.blake2;
 const Allocator = std.mem.Allocator;
 
-pub const SigningBlake2b = SignBlake2b(blake2.Blake2b256, "BLAKE2B");
+pub const SigningBLAKE2B = SignBlake2b(blake2.Blake2b256, "BLAKE2B");
 
 pub fn SignBlake2b(comptime Hash: type, comptime name: []const u8) type {
     return struct {
@@ -73,9 +73,9 @@ pub fn SignBlake2b(comptime Hash: type, comptime name: []const u8) type {
     };
 }
 
-test "SigningBlake2b" {
+test "SigningBLAKE2B" {
     const alloc = std.heap.page_allocator;
-    const h = SigningBlake2b.init(alloc);
+    const h = SigningBLAKE2B.init(alloc);
 
     const alg = h.alg();
     const signLength = h.signLength();
@@ -100,9 +100,9 @@ test "SigningBlake2b" {
 
 }
 
-test "SigningBlake2b key short" {
+test "SigningBLAKE2B key short" {
     const alloc = std.heap.page_allocator;
-    const h = SigningBlake2b.init(alloc);
+    const h = SigningBLAKE2B.init(alloc);
 
     const alg = h.alg();
     const signLength = h.signLength();

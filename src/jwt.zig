@@ -43,7 +43,7 @@ pub const SigningMethodHS256 = JWT(hmac.SigningHS256, []const u8, []const u8);
 pub const SigningMethodHS384 = JWT(hmac.SigningHS384, []const u8, []const u8);
 pub const SigningMethodHS512 = JWT(hmac.SigningHS512, []const u8, []const u8);
 
-pub const SigningMethodBLAKE2B = JWT(blake2b.SigningBlake2b, []const u8, []const u8);
+pub const SigningMethodBLAKE2B = JWT(blake2b.SigningBLAKE2B, []const u8, []const u8);
 
 pub const SigningMethodNone = JWT(none.SigningNone, []const u8, []const u8);
 
@@ -198,7 +198,19 @@ pub fn getSigningMethod(name: []const u8) !type {
     if (utils.eq(name, "EdDSA")) {
         return SigningMethodEdDSA;
     }
+    if (utils.eq(name, "ED25519")) {
+        return SigningMethodED25519;
+    }
 
+    if (utils.eq(name, "HMD5")) {
+        return SigningMethodHMD5;
+    }
+    if (utils.eq(name, "HSHA1")) {
+        return SigningMethodHSHA1;
+    }
+    if (utils.eq(name, "HS224")) {
+        return SigningMethodHS224;
+    }
     if (utils.eq(name, "HS256")) {
         return SigningMethodHS256;
     }
@@ -243,7 +255,11 @@ test "getSigningMethod" {
     try testing.expectEqual(SigningMethodES256K, try getSigningMethod("ES256K"));
 
     try testing.expectEqual(SigningMethodEdDSA, try getSigningMethod("EdDSA"));
+    try testing.expectEqual(SigningMethodED25519, try getSigningMethod("ED25519"));
 
+    try testing.expectEqual(SigningMethodHMD5, try getSigningMethod("HMD5"));
+    try testing.expectEqual(SigningMethodHSHA1, try getSigningMethod("HSHA1"));
+    try testing.expectEqual(SigningMethodHS224, try getSigningMethod("HS224"));
     try testing.expectEqual(SigningMethodHS256, try getSigningMethod("HS256"));
     try testing.expectEqual(SigningMethodHS384, try getSigningMethod("HS384"));
     try testing.expectEqual(SigningMethodHS512, try getSigningMethod("HS512"));

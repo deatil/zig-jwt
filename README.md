@@ -117,13 +117,13 @@ pub fn main() !void {
     std.debug.print("hasBeenIssuedBy: {} \n", .{validator.hasBeenIssuedBy("iss")});
 
     // have functions:
-    // validator.hasBeenIssuedBy("iss")
-    // validator.isRelatedTo("sub")
-    // validator.isIdentifiedBy("jti rrr")
+    // validator.hasBeenIssuedBy("iss") // iss
+    // validator.isRelatedTo("sub") // sub
+    // validator.isIdentifiedBy("jti rrr") // jti
     // validator.isPermittedFor("example.com") // audience
-    // validator.hasBeenIssuedBefore(now) // now is time timestamp
-    // validator.isMinimumTimeBefore(now)
-    // validator.isExpired(now)
+    // validator.hasBeenIssuedBefore(now) // iat, now is time timestamp
+    // validator.isMinimumTimeBefore(now) // nbf
+    // validator.isExpired(now) // exp
 }
 ~~~
 
@@ -148,6 +148,8 @@ The JWT library have signing methods:
  - `EdDSA`: jwt.SigningMethodEdDSA
  - `ED25519`: jwt.SigningMethodED25519
 
+ - `HSHA1`: jwt.SigningMethodHSHA1
+ - `HS224`: jwt.SigningMethodHS224
  - `HS256`: jwt.SigningMethodHS256
  - `HS384`: jwt.SigningMethodHS384
  - `HS512`: jwt.SigningMethodHS512
@@ -161,8 +163,8 @@ The JWT library have signing methods:
 
 RSA PublicKey:
 ~~~zig
-const secret_key = jwt.crypto_rsa.SecretKey;
-const public_key = jwt.crypto_rsa.PublicKey;
+var secret_key: jwt.crypto_rsa.SecretKey = undefined;
+var public_key: jwt.crypto_rsa.PublicKey = undefined;
 
 // rsa no generate
 
@@ -179,14 +181,14 @@ ECDSA PublicKey:
 ~~~zig
 const ecdsa = std.crypto.sign.ecdsa;
 
-const p256_secret_key = ecdsa.EcdsaP256Sha256.SecretKey;
-const p256_public_key = ecdsa.EcdsaP256Sha256.PublicKey;
+var p256_secret_key: ecdsa.EcdsaP256Sha256.SecretKey = undefined;
+var p256_public_key: ecdsa.EcdsaP256Sha256.PublicKey = undefined;
 
-const p384_secret_key = ecdsa.EcdsaP384Sha384.SecretKey;
-const p384_public_key = ecdsa.EcdsaP384Sha384.PublicKey;
+var p384_secret_key: ecdsa.EcdsaP384Sha384.SecretKey = undefined;
+var p384_public_key: ecdsa.EcdsaP384Sha384.PublicKey = undefined;
 
-const p256k_secret_key = ecdsa.EcdsaSecp256k1Sha256.SecretKey;
-const p256k_public_key = ecdsa.EcdsaSecp256k1Sha256.PublicKey;
+var p256k_secret_key: ecdsa.EcdsaSecp256k1Sha256.SecretKey = undefined;
+var p256k_public_key: ecdsa.EcdsaSecp256k1Sha256.PublicKey = undefined;
 
 // generate p256 public key
 const p256_kp = ecdsa.EcdsaP256Sha256.KeyPair.generate();
@@ -223,8 +225,8 @@ EdDSA PublicKey:
 ~~~zig
 const Ed25519 = std.crypto.sign.Ed25519;
 
-const secret_key = Ed25519.SecretKey;
-const public_key = Ed25519.PublicKey;
+var secret_key: Ed25519.SecretKey = undefined;
+var public_key: Ed25519.PublicKey = undefined;
 
 // generate public key
 const kp = Ed25519.KeyPair.generate();
