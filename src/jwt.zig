@@ -236,8 +236,7 @@ pub fn getTokenHeader(alloc: Allocator, token_string: []const u8) !Token.Header 
     var t = Token.init(alloc);
     try t.parse(token_string);
 
-    const header = try t.getHeader();
-    return header;
+    return t.getHeader();
 }
 
 test "getSigningMethod" {

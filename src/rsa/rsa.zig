@@ -56,7 +56,7 @@ pub const PublicKey = struct {
         try parser.expectEnd(seq.slice.end);
         try parser.expectEnd(bytes.len);
 
-        return fromBytes(parser.view(modulus), parser.view(pub_exp));
+        return Self.fromBytes(parser.view(modulus), parser.view(pub_exp));
     }
 
     pub fn fromPKCS8Der(bytes: []const u8) !PublicKey {
@@ -74,7 +74,7 @@ pub const PublicKey = struct {
         try parser.expectEnd(seq.slice.end);
         try parser.expectEnd(bytes.len);
 
-        return PublicKey.fromDer(pubkey.bytes);
+        return Self.fromDer(pubkey.bytes);
     }
 
     pub fn fromDerAuto(bytes: []const u8) !PublicKey {
@@ -243,7 +243,7 @@ pub const SecretKey = struct {
             // if (public.n.mul(de, q).compare(one) != .eq) return error.KeyMismatch;
         }
 
-        return SecretKey.fromBytes(n, e, dbytes, p, q);
+        return Self.fromBytes(n, e, dbytes, p, q);
     }
 
     pub fn fromPKCS8Der(bytes: []const u8) !SecretKey {
@@ -263,7 +263,7 @@ pub const SecretKey = struct {
         parser.seek(oid_seq.slice.end);
         const prikey = try parser.expect(.universal, false, .octetstring);
 
-        return SecretKey.fromDer(parser.view(prikey));
+        return Self.fromDer(parser.view(prikey));
     }
 
     pub fn fromDerAuto(bytes: []const u8) !SecretKey {
