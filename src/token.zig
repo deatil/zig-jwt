@@ -11,7 +11,7 @@ pub const Token = struct {
     header: []const u8 = "",
     claims: []const u8 = "",
     signature: []const u8 = "",
-    alloc: Allocator, 
+    alloc: Allocator,
 
     const Self = @This();
 
@@ -123,7 +123,7 @@ pub const Token = struct {
             claims = pair;
         }
 
-        const signature = try std.mem.joinZ(self.alloc, ".", &.{header, claims});
+        const signature = try std.mem.joinZ(self.alloc, ".", &.{ header, claims });
         return signature;
     }
 
@@ -135,6 +135,8 @@ pub const Token = struct {
             if (jwt_type == .string) {
                 typ = jwt_type.string;
             }
+        } else {
+            typ = "JWT";
         }
 
         var alg: []const u8 = "";
@@ -275,7 +277,6 @@ test "Token" {
 
     const sig6 = try token6.getRawNoSignature();
     try testing.expectEqualStrings(check3, sig6);
-
 }
 
 test "Token 2" {
@@ -373,5 +374,4 @@ test "Token 3" {
     try testing.expectEqualStrings(header.typ, header33.object.get("typ").?.string);
     try testing.expectEqualStrings(header.alg, header33.object.get("alg").?.string);
     try testing.expectEqualStrings(header.kid.?, header33.object.get("kid").?.string);
-
 }

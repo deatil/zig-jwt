@@ -47,19 +47,14 @@ pub const SigningMethodBLAKE2B = JWT(blake2b.SigningBLAKE2B, []const u8, []const
 
 pub const SigningMethodNone = JWT(none.SigningNone, []const u8, []const u8);
 
-pub const Error = error {
-    JWTVerifyFail,
-    JWTSigningMethodNotExists,
-    JWTTypeInvalid,
-    JWTAlgoInvalid
-};
+pub const Error = error{ JWTVerifyFail, JWTSigningMethodNotExists, JWTTypeInvalid, JWTAlgoInvalid };
 
 pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKeyType: type) type {
     const BuilderType = builder.Builder(Signer, SignKeyType);
-    
+
     return struct {
         signer: Signer,
-        alloc: Allocator, 
+        alloc: Allocator,
 
         const Self = @This();
 
@@ -117,6 +112,7 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
             if (!utils.eq(header.typ, "JWT")) {
                 return Error.JWTTypeInvalid;
             }
+
             if (!utils.eq(header.alg, self.signer.alg())) {
                 return Error.JWTAlgoInvalid;
             }
@@ -273,7 +269,6 @@ test "getSigningMethod" {
         try testing.expectEqual(Error.JWTSigningMethodNotExists, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "parse JWTTypeInvalid" {
@@ -291,7 +286,6 @@ test "parse JWTTypeInvalid" {
         try testing.expectEqual(Error.JWTTypeInvalid, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "parse JWTSignatureInvalid" {
@@ -309,7 +303,6 @@ test "parse JWTSignatureInvalid" {
         try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "Token Validator" {
@@ -332,7 +325,6 @@ test "Token Validator" {
 
     const claims = try token.getClaims();
     try testing.expectEqual(true, claims.object.get("nbf").?.integer > 0);
-    
 }
 
 test "SigningMethodEdDSA builder" {
@@ -367,7 +359,6 @@ test "SigningMethodEdDSA builder" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodEdDSA signWithHeader" {
@@ -410,7 +401,6 @@ test "SigningMethodEdDSA signWithHeader" {
 
     try testing.expectEqual(64, s.signLength());
     try testing.expectEqualStrings("EdDSA", s.alg());
-
 }
 
 test "SigningMethodEdDSA" {
@@ -435,7 +425,6 @@ test "SigningMethodEdDSA" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodES256" {
@@ -460,7 +449,6 @@ test "SigningMethodES256" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodES384" {
@@ -485,7 +473,6 @@ test "SigningMethodES384" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodES256K" {
@@ -510,7 +497,6 @@ test "SigningMethodES256K" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodHMD5" {
@@ -534,7 +520,6 @@ test "SigningMethodHMD5" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodHSHA1" {
@@ -558,7 +543,6 @@ test "SigningMethodHSHA1" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodHS224" {
@@ -582,7 +566,6 @@ test "SigningMethodHS224" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodHS256" {
@@ -606,7 +589,6 @@ test "SigningMethodHS256" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodHS384" {
@@ -630,7 +612,6 @@ test "SigningMethodHS384" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodHS512" {
@@ -654,7 +635,6 @@ test "SigningMethodHS512" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodBLAKE2B" {
@@ -678,7 +658,6 @@ test "SigningMethodBLAKE2B" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodNone" {
@@ -702,7 +681,6 @@ test "SigningMethodNone" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "use JWTClaims to json" {
@@ -750,7 +728,6 @@ test "SigningMethodES256 Check" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.foo, claims2.object.get("foo").?.string);
-
 }
 
 test "SigningMethodES384 Check" {
@@ -786,7 +763,6 @@ test "SigningMethodES384 Check" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.foo, claims2.object.get("foo").?.string);
-
 }
 
 test "SigningMethodES256 Check fail" {
@@ -808,7 +784,6 @@ test "SigningMethodES256 Check fail" {
         try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "SigningMethodES256K Check" {
@@ -844,7 +819,6 @@ test "SigningMethodES256K Check" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.foo, claims2.object.get("foo").?.string);
-
 }
 
 test "SigningMethodEdDSA Check" {
@@ -881,7 +855,6 @@ test "SigningMethodEdDSA Check" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.foo, claims2.object.get("foo").?.string);
-
 }
 
 test "SigningMethodEdDSA Check fail" {
@@ -905,7 +878,6 @@ test "SigningMethodEdDSA Check fail" {
         try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "SigningMethodHS256 Check" {
@@ -934,7 +906,6 @@ test "SigningMethodHS256 Check" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.iss, claims2.object.get("iss").?.string);
-
 }
 
 test "SigningMethodHS384 Check" {
@@ -963,7 +934,6 @@ test "SigningMethodHS384 Check" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.iss, claims2.object.get("iss").?.string);
-
 }
 
 test "SigningMethodHS512 Check" {
@@ -992,7 +962,6 @@ test "SigningMethodHS512 Check" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.iss, claims2.object.get("iss").?.string);
-
 }
 
 test "SigningMethodHS256 Check fail" {
@@ -1012,7 +981,6 @@ test "SigningMethodHS256 Check fail" {
         try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "SigningMethodBLAKE2B Check" {
@@ -1042,7 +1010,6 @@ test "SigningMethodBLAKE2B Check" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.iss, claims2.object.get("iss").?.string);
-
 }
 
 test "SigningMethodBLAKE2B Check fail" {
@@ -1062,7 +1029,6 @@ test "SigningMethodBLAKE2B Check fail" {
         try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "getTokenHeader" {
@@ -1072,7 +1038,6 @@ test "getTokenHeader" {
 
     const header = try getTokenHeader(alloc, token_str);
     try testing.expectEqualStrings("ES256", header.alg);
-
 }
 
 test "SigningMethodES256 with JWTClaims" {
@@ -1097,7 +1062,6 @@ test "SigningMethodES256 with JWTClaims" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud.?, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub.?, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodRS256" {
@@ -1129,7 +1093,6 @@ test "SigningMethodRS256" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodRS384" {
@@ -1161,7 +1124,6 @@ test "SigningMethodRS384" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodRS512" {
@@ -1193,7 +1155,6 @@ test "SigningMethodRS512" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodPS256" {
@@ -1225,7 +1186,6 @@ test "SigningMethodPS256" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodPS384" {
@@ -1257,7 +1217,6 @@ test "SigningMethodPS384" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodPS512" {
@@ -1289,7 +1248,6 @@ test "SigningMethodPS512" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodRS256 Check" {
@@ -1307,7 +1265,6 @@ test "SigningMethodRS256 Check" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
-
 }
 
 test "SigningMethodRS384 Check" {
@@ -1324,7 +1281,6 @@ test "SigningMethodRS384 Check" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
-
 }
 
 test "SigningMethodRS512 Check" {
@@ -1341,7 +1297,6 @@ test "SigningMethodRS512 Check" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
-
 }
 
 test "SigningMethodRS256 Check fail" {
@@ -1361,7 +1316,6 @@ test "SigningMethodRS256 Check fail" {
         try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "SigningMethodPS256 Check" {
@@ -1378,7 +1332,6 @@ test "SigningMethodPS256 Check" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
-
 }
 
 test "SigningMethodPS384 Check" {
@@ -1395,7 +1348,6 @@ test "SigningMethodPS384 Check" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
-
 }
 
 test "SigningMethodPS512 Check" {
@@ -1412,7 +1364,6 @@ test "SigningMethodPS512 Check" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
-
 }
 
 test "SigningMethodPS256 Check fail" {
@@ -1432,7 +1383,6 @@ test "SigningMethodPS256 Check fail" {
         try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "SigningMethodRS256 with pkcs8 key" {
@@ -1464,7 +1414,6 @@ test "SigningMethodRS256 with pkcs8 key" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodPS256 with pkcs8 key" {
@@ -1496,7 +1445,6 @@ test "SigningMethodPS256 with pkcs8 key" {
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
 }
 
 test "SigningMethodRS256 Check with pkcs8 key" {
@@ -1513,7 +1461,6 @@ test "SigningMethodRS256 Check with pkcs8 key" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
-
 }
 
 test "SigningMethodPS256 Check with pkcs8 key" {
@@ -1530,5 +1477,4 @@ test "SigningMethodPS256 Check with pkcs8 key" {
 
     const claims2 = try parsed.getClaims();
     try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
-
 }
