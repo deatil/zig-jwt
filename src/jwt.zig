@@ -108,15 +108,16 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
             return signed_token;
         }
 
-        // parse token and verify token signature
+        // parse token and token signature verify
         pub fn parse(self: Self, token_string: []const u8, verify_key: VerifyKeyType) !Token {
             var t = Token.init(self.alloc);
             try t.parse(token_string);
 
             const header = try t.getHeader();
-            if (!utils.eq(header.typ, "JWT")) {
+            if (header.typ.len > 0 and !utils.eq(header.typ, "JWT")) {
                 return Error.JWTTypeInvalid;
             }
+
             if (!utils.eq(header.alg, self.signer.alg())) {
                 return Error.JWTAlgoInvalid;
             }
@@ -1532,3 +1533,98 @@ test "SigningMethodPS256 Check with pkcs8 key" {
     try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
 
 }
+
+test "SigningMethodEdDSA type" {
+    const alloc = std.heap.page_allocator;
+
+    const kp = eddsa.Ed25519.KeyPair.generate();
+
+    const headers = .{
+        .alg = "EdDSA",
+    };
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+
+    const s = SigningMethodEdDSA.init(alloc);
+    const token_string = try s.signWithHeader(headers, claims, kp.secret_key);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = SigningMethodEdDSA.init(alloc);
+    var parsed = try p.parse(token_string, kp.public_key);
+
+    const claims2 = try parsed.getClaims();
+    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
+
+    const headers2 = try parsed.getHeader();
+    try testing.expectEqualStrings("", headers2.typ);
+    try testing.expectEqualStrings(headers.alg, headers2.alg);
+
+}
+
+test "SigningMethodEdDSA JWTTypeInvalid" {
+    const alloc = std.heap.page_allocator;
+
+    const kp = eddsa.Ed25519.KeyPair.generate();
+
+    const headers = .{
+        .typ = "JWE",
+        .alg = "EdDSA",
+    };
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+
+    const s = SigningMethodEdDSA.init(alloc);
+    const token_string = try s.signWithHeader(headers, claims, kp.secret_key);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = SigningMethodEdDSA.init(alloc);
+
+    var need_true: bool = false;
+    _ = p.parse(token_string, kp.public_key) catch |err| {
+        need_true = true;
+        try testing.expectEqual(Error.JWTTypeInvalid, err);
+    };
+    try testing.expectEqual(true, need_true);
+
+}
+
+test "SigningMethodEdDSA JWTAlgoInvalid" {
+    const alloc = std.heap.page_allocator;
+
+    const kp = ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate();
+
+    const headers = .{
+        .typ = "JWT",
+        .alg = "ES384",
+    };
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+
+    const s = SigningMethodES256.init(alloc);
+    const token_string = try s.signWithHeader(headers, claims, kp.secret_key);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = SigningMethodES256.init(alloc);
+
+    var need_true: bool = false;
+    _ = p.parse(token_string, kp.public_key) catch |err| {
+        need_true = true;
+        try testing.expectEqual(Error.JWTAlgoInvalid, err);
+    };
+    try testing.expectEqual(true, need_true);
+
+}
+
