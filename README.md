@@ -243,8 +243,10 @@ const public_key = try jwt.eddsa.parsePublicKeyDer(pub_key_bytes);
 ### Custom Signing Method
 
 ~~~zig
-const ecdsa = std.crypto.sign.ecdsa;
+const std = @import("std");
 const jwt = @import("zig-jwt");
+
+const ecdsa = std.crypto.sign.ecdsa;
 
 // public custom signing method
 pub const SigningMethodES3_384 = jwt.JWT(SigningES3_384, ecdsa.EcdsaP384Sha3_384.SecretKey, ecdsa.EcdsaP384Sha3_384.PublicKey);
