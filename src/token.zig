@@ -52,12 +52,12 @@ pub const Token = struct {
         self.signature = signature;
     }
 
-    pub fn signedString(self: *Self) ![]const u8 {
-        return self.signing(true);
-    }
-
     pub fn signingString(self: *Self) ![]const u8 {
         return self.signing(false);
+    }
+
+    pub fn signedString(self: *Self) ![]const u8 {
+        return self.signing(true);
     }
 
     fn signing(self: *Self, need_sign: bool) ![]const u8 {

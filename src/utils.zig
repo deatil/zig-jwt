@@ -115,6 +115,9 @@ test "base64UrlEncode" {
     const res2 = try base64UrlDecode(alloc, check);
     try testing.expectEqualStrings(msg, res2);
 
+    const res3 = try base64Decode(alloc, check);
+    try testing.expectEqualStrings(msg, res3);
+
 }
 
 test "jsonEncode" {

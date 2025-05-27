@@ -5,7 +5,7 @@ A JWT (JSON Web Token) library for zig.
 
 ### Env
 
- - Zig >= 0.14.0-dev.3451+d8d2aa9af
+ - Zig >= 0.15.0-dev.337+4e700fdf8
 
 
 ### What the heck is a JWT?
@@ -122,8 +122,8 @@ pub fn main() !void {
     // validator.isIdentifiedBy("jti rrr") // jti
     // validator.isPermittedFor("example.com") // audience
     // validator.hasBeenIssuedBefore(now) // iat, now is time timestamp
-    // validator.isMinimumTimeBefore(now) // nbf
-    // validator.isExpired(now) // exp
+    // validator.isMinimumTimeBefore(now) // nbf, now is time timestamp
+    // validator.isExpired(now) // exp, now is time timestamp
 }
 ~~~
 
@@ -237,6 +237,74 @@ const public_key = try Ed25519.PublicKey.fromBytes(pub_key_bytes);
 // from der bytes
 const secret_key = try jwt.eddsa.parseSecretKeyDer(pri_key_bytes);
 const public_key = try jwt.eddsa.parsePublicKeyDer(pub_key_bytes);
+~~~
+
+
+### Custom Signing Method
+
+~~~zig
+const ecdsa = std.crypto.sign.ecdsa;
+const jwt = @import("zig-jwt");
+
+// public custom signing method
+pub const SigningMethodES3_384 = jwt.JWT(SigningES3_384, ecdsa.EcdsaP384Sha3_384.SecretKey, ecdsa.EcdsaP384Sha3_384.PublicKey);
+
+// example: use EcdsaP384Sha3_384 signer
+const SigningES3_384 = SignCustom(ecdsa.EcdsaP384Sha3_384, "ES3_384");
+
+// sign and verify custom struct
+fn SignCustom(comptime EC: type, comptime name: []const u8) type {
+    return struct {
+        alloc: Allocator, 
+
+        const Self = @This();
+
+        pub const encoded_length = EC.Signature.encoded_length;
+
+        pub fn init(alloc: Allocator) Self {
+            return .{
+                .alloc = alloc,
+            };
+        }
+
+        pub fn alg(self: Self) []const u8 {
+            _ = self;
+            return name;
+        }
+
+        pub fn signLength(self: Self) isize {
+            _ = self;
+            return encoded_length;
+        }
+
+        pub fn sign(self: Self, msg: []const u8, key: EC.SecretKey) ![]u8 {
+            var secret_key = try EC.KeyPair.fromSecretKey(key);
+
+            const sig = try secret_key.sign(msg[0..], null);
+            const out = sig.toBytes();
+
+            return self.alloc.dupe(u8, out[0..]);
+        }
+
+        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: EC.PublicKey) bool {
+            const sign_length = self.signLength();
+            if (signature.len != sign_length) {
+                return false;
+            }
+            
+            var signed: [encoded_length]u8 = undefined;
+            @memcpy(signed[0..], signature);
+
+            const sig = EC.Signature.fromBytes(signed);
+            sig.verify(msg, key) catch {
+                return false;
+            };
+
+            return true;
+        }
+    };
+}
+
 ~~~
 
 

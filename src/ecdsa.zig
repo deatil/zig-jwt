@@ -106,7 +106,7 @@ pub fn ParseKeyDer(comptime EC: type) type {
                     try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_s256_namedcurve);
                 },
                 else => {
-                    return error.NamedCurveNotSupport;
+                    return error.JWTEcdsaNamedCurveNotSupport;
                 },
             }
 
@@ -129,7 +129,7 @@ pub fn ParseKeyDer(comptime EC: type) type {
 
             const version = try parser.expectInt(u8);
             if (version != 0) {
-                return error.PKCS8VersionError;
+                return error.JWTEcdsaPKCS8VersionError;
             }
 
             const oid_seq = try parser.expectSequence();
@@ -159,7 +159,7 @@ pub fn ParseKeyDer(comptime EC: type) type {
 
             const version = try parser.expectInt(u8);
             if (version != 1) {
-                return error.ECVersionError;
+                return error.JWTEcdsaECVersionError;
             }
 
             const prikey_octet = try parser.expect(.universal, false, .octetstring);
@@ -171,7 +171,7 @@ pub fn ParseKeyDer(comptime EC: type) type {
             } else {
                 const oid_seq = try parser.expect(.context_specific, true, null);
                 if (@intFromEnum(oid_seq.identifier.tag) != 0) {
-                    return error.OidTagSeqError;
+                    return error.JWTEcdsaOidTagError;
                 }
                 namedcurve_oid = parser.expectOid() catch "";
             }
@@ -187,7 +187,7 @@ pub fn ParseKeyDer(comptime EC: type) type {
                     try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_s256_namedcurve);
                 },
                 else => {
-                    return error.NamedCurveNotSupport;
+                    return error.JWTEcdsaNamedCurveNotSupport;
                 },
             }
 
@@ -206,7 +206,7 @@ fn checkECDSAPublickeyOid(oid: []const u8) !void {
 
     const oid_string = stream.getWritten();
     if (!std.mem.eql(u8, oid_string, oid_ecdsa_publickey)) {
-        return error.ECDSAOidError;
+        return error.JWTEcdsaOidError;
     }
 
     return;
@@ -219,7 +219,7 @@ fn checkECDSAPublickeyNamedCurveOid(oid: []const u8, namedcurve_oid: []const u8)
 
     const oid_string = stream.getWritten();
     if (!std.mem.eql(u8, oid_string, namedcurve_oid)) {
-        return error.NamedcurveOidNotSupport;
+        return error.JWTEcdsaNamedcurveOidNotSupport;
     }
 
     return;

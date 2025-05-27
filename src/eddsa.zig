@@ -72,7 +72,7 @@ pub fn parseSecretKeyDer(bytes: []const u8) !Ed25519.SecretKey {
 
     const version = try parser.expectInt(u8);
     if (version != 0) {
-        return error.PKCS8VersionError;
+        return error.JWTEdDSAPKCS8VersionError;
     }
     
     const oid_seq = try parser.expectSequence();
@@ -88,7 +88,7 @@ pub fn parseSecretKeyDer(bytes: []const u8) !Ed25519.SecretKey {
 
     const parse_prikey_bytes = prikey_parser.view(prikey);
     if (parse_prikey_bytes.len != Ed25519.KeyPair.seed_length) {
-        return error.SecretKeyBytesLengthError;
+        return error.JWTEdDSASecretKeyBytesLengthError;
     }
     
     var seed: [Ed25519.KeyPair.seed_length]u8 = undefined;
@@ -115,7 +115,7 @@ pub fn parsePublicKeyDer(bytes: []const u8) !Ed25519.PublicKey {
     try parser.expectEnd(bytes.len);
 
     if (pubkey.bytes.len != Ed25519.PublicKey.encoded_length) {
-        return error.PublicKeyBytesLengthError;
+        return error.JWTEdDSAPublicKeyBytesLengthError;
     }
 
     var pubkey_bytes: [Ed25519.PublicKey.encoded_length]u8 = undefined;
@@ -131,7 +131,7 @@ fn checkEdDSAPublickeyOid(oid: []const u8) !void {
 
     const oid_string = stream.getWritten();
     if (!std.mem.eql(u8, oid_string, oid_eddsa_publickey)) {
-        return error.EdDSAOidError;
+        return error.JWTEdDSAOidError;
     }
 
     return;
