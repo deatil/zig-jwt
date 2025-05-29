@@ -11,7 +11,7 @@ pub const oids = @import("oid.zig");
 pub const max_modulus_bits = 4096;
 pub const max_modulus_len = max_modulus_bits / 8;
 
-pub const PSSSaltLengthAuto = 0;
+pub const pss_salt_length_auto = 0;
 
 const oid_rsa_publickey = "1.2.840.113549.1.1.1";
 
@@ -873,7 +873,7 @@ pub fn Pss(comptime Hash: type) type {
             }
             dbMask[0] = dbMask[0] & mask;
 
-            if (sLen == PSSSaltLengthAuto) {
+            if (sLen == pss_salt_length_auto) {
                 if (std.mem.indexOfScalar(u8, dbMask, 0x01)) |ps_len| {
                     sLen = dbMask.len - ps_len - 1;
                 } else {

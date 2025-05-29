@@ -55,7 +55,7 @@ pub fn SignRSAPss(comptime RSAPssType: type, comptime name: []const u8) type {
             _ = self;
 
             var verifier = RSAPssType.Signature.fromBytes(signature);
-            verifier.verify(msg, key, rsa.PSSSaltLengthAuto) catch {
+            verifier.verify(msg, key, rsa.pss_salt_length_auto) catch {
                 return false;
             };
 
