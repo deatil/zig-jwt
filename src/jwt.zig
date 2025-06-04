@@ -47,19 +47,14 @@ pub const SigningMethodBLAKE2B = JWT(blake2b.SigningBLAKE2B, []const u8, []const
 
 pub const SigningMethodNone = JWT(none.SigningNone, []const u8, []const u8);
 
-pub const Error = error {
-    JWTVerifyFail,
-    JWTSigningMethodNotExists,
-    JWTTypeInvalid,
-    JWTAlgoInvalid
-};
+pub const Error = error{ JWTVerifyFail, JWTSigningMethodNotExists, JWTTypeInvalid, JWTAlgoInvalid };
 
 pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKeyType: type) type {
     const BuilderType = builder.Builder(Signer, SignKeyType);
-    
+
     return struct {
         signer: Signer,
-        alloc: Allocator, 
+        alloc: Allocator,
 
         const Self = @This();
 
@@ -102,10 +97,9 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
             const signature = try self.signer.sign(signing_string, sign_key);
             defer self.alloc.free(signature);
 
-            t.withSignature(signature);
+            try t.withSignature(signature);
 
-            const signed_token = try t.signedString();
-            return signed_token;
+            return t.signedString();
         }
 
         // parse token and token signature verify
@@ -113,16 +107,22 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
             var t = Token.init(self.alloc);
             try t.parse(token_string);
 
-            const header = try t.getHeader();
+            var header = try t.getHeader();
+            defer header.deinit(self.alloc);
+
             if (header.typ.len > 0 and !utils.eq(header.typ, "JWT")) {
+                defer t.deinit();
+
                 return Error.JWTTypeInvalid;
             }
 
             if (!utils.eq(header.alg, self.signer.alg())) {
+                defer t.deinit();
+
                 return Error.JWTAlgoInvalid;
             }
 
-            const signature = t.getSignature();
+            const signature = try t.getSignature();
             defer self.alloc.free(signature);
 
             const token_sign = try self.alloc.alloc(u8, signature.len);
@@ -134,6 +134,8 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
             defer self.alloc.free(signing_string);
 
             if (!self.signer.verify(signing_string, token_sign, verify_key)) {
+                defer t.deinit();
+
                 return Error.JWTVerifyFail;
             }
 
@@ -237,6 +239,8 @@ pub fn getTokenHeader(alloc: Allocator, token_string: []const u8) !Token.Header 
     var t = Token.init(alloc);
     try t.parse(token_string);
 
+    defer t.deinit();
+
     return t.getHeader();
 }
 
@@ -274,11 +278,10 @@ test "getSigningMethod" {
         try testing.expectEqual(Error.JWTSigningMethodNotExists, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "parse JWTTypeInvalid" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const kp = eddsa.Ed25519.KeyPair.generate();
 
@@ -292,11 +295,10 @@ test "parse JWTTypeInvalid" {
         try testing.expectEqual(Error.JWTTypeInvalid, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "parse JWTSignatureInvalid" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const kp = ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate();
 
@@ -310,11 +312,10 @@ test "parse JWTSignatureInvalid" {
         try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "Token Validator" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const check1 = "eyJ0eXAiOiJKV0UiLCJhbGciOiJFUzI1NiIsImtpZCI6ImtpZHMifQ.eyJpc3MiOiJpc3MiLCJpYXQiOjE1Njc4NDIzODgsImV4cCI6MTc2Nzg0MjM4OCwiYXVkIjoiZXhhbXBsZS5jb20iLCJzdWIiOiJzdWIiLCJqdGkiOiJqdGkgcnJyIiwibmJmIjoxNTY3ODQyMzg4fQ.dGVzdC1zaWduYXR1cmU";
     const now = time.timestamp();
@@ -332,12 +333,12 @@ test "Token Validator" {
     try testing.expectEqual(true, validator.hasBeenIssuedBefore(now));
 
     const claims = try token.getClaims();
-    try testing.expectEqual(true, claims.object.get("nbf").?.integer > 0);
-    
+    defer claims.deinit();
+    try testing.expectEqual(true, claims.value.object.get("nbf").?.integer > 0);
 }
 
 test "SigningMethodEdDSA builder" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const kp = eddsa.Ed25519.KeyPair.generate();
 
@@ -347,6 +348,7 @@ test "SigningMethodEdDSA builder" {
     };
 
     var build = SigningMethodEdDSA.init(alloc).build();
+    defer build.deinit();
 
     var c = build.claimsData();
     defer c.deinit();
@@ -357,22 +359,26 @@ test "SigningMethodEdDSA builder" {
     try c.end();
 
     var t = try build.getToken(kp.secret_key);
+    defer t.deinit();
+
     const token_string = try t.signedString();
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodEdDSA.init(alloc);
     var parsed = try p.parse(token_string, kp.public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodEdDSA signWithHeader" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const kp = eddsa.Ed25519.KeyPair.generate();
 
@@ -390,6 +396,7 @@ test "SigningMethodEdDSA signWithHeader" {
     };
 
     const token_string = try s.signWithHeader(header, claims, kp.secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
     try testing.expectEqualStrings("EdDSA", header.alg);
 
@@ -397,25 +404,27 @@ test "SigningMethodEdDSA signWithHeader" {
 
     const p = SigningMethodEdDSA.init(alloc);
     var parsed = try p.parse(token_string, kp.public_key);
+    defer parsed.deinit();
 
     const header2 = try parsed.getHeaderValue();
-    try testing.expectEqualStrings(header.typ, header2.object.get("typ").?.string);
-    try testing.expectEqualStrings(header.alg, header2.object.get("alg").?.string);
-    try testing.expectEqualStrings(header.tuy, header2.object.get("tuy").?.string);
+    defer header2.deinit();
+    try testing.expectEqualStrings(header.typ, header2.value.object.get("typ").?.string);
+    try testing.expectEqualStrings(header.alg, header2.value.object.get("alg").?.string);
+    try testing.expectEqualStrings(header.tuy, header2.value.object.get("tuy").?.string);
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 
     // ==========
 
     try testing.expectEqual(64, s.signLength());
     try testing.expectEqualStrings("EdDSA", s.alg());
-
 }
 
 test "SigningMethodEdDSA" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const kp = eddsa.Ed25519.KeyPair.generate();
 
@@ -426,21 +435,23 @@ test "SigningMethodEdDSA" {
 
     const s = SigningMethodEdDSA.init(alloc);
     const token_string = try s.sign(claims, kp.secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodEdDSA.init(alloc);
     var parsed = try p.parse(token_string, kp.public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodES256" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const kp = ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate();
 
@@ -451,21 +462,23 @@ test "SigningMethodES256" {
 
     const s = SigningMethodES256.init(alloc);
     const token_string = try s.sign(claims, kp.secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodES256.init(alloc);
     var parsed = try p.parse(token_string, kp.public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodES384" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const kp = ecdsa.ecdsa.EcdsaP384Sha384.KeyPair.generate();
 
@@ -476,21 +489,23 @@ test "SigningMethodES384" {
 
     const s = SigningMethodES384.init(alloc);
     const token_string = try s.sign(claims, kp.secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodES384.init(alloc);
     var parsed = try p.parse(token_string, kp.public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodES256K" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const kp = ecdsa.ecdsa.EcdsaSecp256k1Sha256.KeyPair.generate();
 
@@ -501,21 +516,23 @@ test "SigningMethodES256K" {
 
     const s = SigningMethodES256K.init(alloc);
     const token_string = try s.sign(claims, kp.secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodES256K.init(alloc);
     var parsed = try p.parse(token_string, kp.public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodHMD5" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const claims = .{
         .aud = "example.com",
@@ -525,21 +542,23 @@ test "SigningMethodHMD5" {
 
     const s = SigningMethodHMD5.init(alloc);
     const token_string = try s.sign(claims, key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodHMD5.init(alloc);
     var parsed = try p.parse(token_string, key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodHSHA1" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const claims = .{
         .aud = "example.com",
@@ -549,21 +568,23 @@ test "SigningMethodHSHA1" {
 
     const s = SigningMethodHSHA1.init(alloc);
     const token_string = try s.sign(claims, key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodHSHA1.init(alloc);
     var parsed = try p.parse(token_string, key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodHS224" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const claims = .{
         .aud = "example.com",
@@ -573,21 +594,23 @@ test "SigningMethodHS224" {
 
     const s = SigningMethodHS224.init(alloc);
     const token_string = try s.sign(claims, key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodHS224.init(alloc);
     var parsed = try p.parse(token_string, key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodHS256" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const claims = .{
         .aud = "example.com",
@@ -597,21 +620,23 @@ test "SigningMethodHS256" {
 
     const s = SigningMethodHS256.init(alloc);
     const token_string = try s.sign(claims, key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodHS256.init(alloc);
     var parsed = try p.parse(token_string, key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodHS384" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const claims = .{
         .aud = "example.com",
@@ -621,21 +646,23 @@ test "SigningMethodHS384" {
 
     const s = SigningMethodHS384.init(alloc);
     const token_string = try s.sign(claims, key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodHS384.init(alloc);
     var parsed = try p.parse(token_string, key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodHS512" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const claims = .{
         .aud = "example.com",
@@ -645,21 +672,23 @@ test "SigningMethodHS512" {
 
     const s = SigningMethodHS512.init(alloc);
     const token_string = try s.sign(claims, key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodHS512.init(alloc);
     var parsed = try p.parse(token_string, key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodBLAKE2B" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const claims = .{
         .aud = "example.com",
@@ -669,21 +698,23 @@ test "SigningMethodBLAKE2B" {
 
     const s = SigningMethodBLAKE2B.init(alloc);
     const token_string = try s.sign(claims, key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodBLAKE2B.init(alloc);
     var parsed = try p.parse(token_string, key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodNone" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const claims = .{
         .aud = "example.com",
@@ -693,21 +724,23 @@ test "SigningMethodNone" {
 
     const s = SigningMethodNone.init(alloc);
     const token_string = try s.sign(claims, key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodNone.init(alloc);
     var parsed = try p.parse(token_string, key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "use JWTClaims to json" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const msg = JWTClaims{
         .iss = "test-data",
@@ -715,11 +748,12 @@ test "use JWTClaims to json" {
     const check = "{\"iss\":\"test-data\"}";
 
     const res = try utils.jsonEncode(alloc, msg);
+    defer alloc.free(res);
     try testing.expectEqualStrings(check, res);
 }
 
 test "SigningMethodES256 Check" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const pub_key = "04603e7857fbe9fb9e0ff435daad8ab1e0c3dc9be1ca44843335ab184a84501d0ffa4ba3ecf2da4c713f8abc8202f16fdef64d16ec29bbd8cd4ff6353b48b7ffbe";
     const pri_key = "603e7857fbe9fb9e0ff435daad8ab1e0c3dc9be1ca44843335ab184a84501d0f";
@@ -742,20 +776,22 @@ test "SigningMethodES256 Check" {
 
     const s = SigningMethodES256.init(alloc);
     const token_string = try s.sign(claims, secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodES256.init(alloc);
     var parsed = try p.parse(token_str, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.foo, claims2.object.get("foo").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.foo, claims2.value.object.get("foo").?.string);
 }
 
 test "SigningMethodES384 Check" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const pub_key = "04d86bbac9694edf78b32aac0c7a69d6453503a96941ff53295b64bae238b38de58155c2d554a4ed457c45d9508429a6d44fb5ce62c483d8eb9f3284149bea2adf2095123fd6984df94918a93f98390ae2df26581ce1883e41ea383d7041a11a00";
     const pri_key = "d86bbac9694edf78b32aac0c7a69d6453503a96941ff53295b64bae238b38de58155c2d554a4ed457c45d9508429a6d4";
@@ -778,20 +814,22 @@ test "SigningMethodES384 Check" {
 
     const s = SigningMethodES384.init(alloc);
     const token_string = try s.sign(claims, secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodES384.init(alloc);
     var parsed = try p.parse(token_str, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.foo, claims2.object.get("foo").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.foo, claims2.value.object.get("foo").?.string);
 }
 
 test "SigningMethodES256 Check fail" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const pub_key = "04603e7857fbe9fb9e0ff435daad8ab1e0c3dc9be1ca44843335ab184a84501d0ffa4ba3ecf2da4c713f8abc8202f16fdef64d16ec29bbd8cd4ff6353b48b7ffbe";
     const token_str = "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJmb28iOiJiYXIifQ.MEQCIHoSJnmGlPaVQDqacx_2XlXEhhqtWceVopjomc2PJLtdAiAUTeGPoNYxZw0z8mgOnnIcjoxRuNDVZvybRZF3wR1l8W";
@@ -809,11 +847,10 @@ test "SigningMethodES256 Check fail" {
         try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "SigningMethodES256K Check" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const pub_key = "04cbcc2ebfaf9f5e874b3cb7e1c66d77db2d51f26e1d92783bb477bb37eb142d5d84b61e80c445d07ddf84e27b9c791db550d0af40aab1898c02cd5c0829c1defc";
     const pri_key = "c4e29dedecf2d4fef1bb300cce3fcfca3ec086066fd3d03ebc3cc7a36ee900dd";
@@ -836,20 +873,22 @@ test "SigningMethodES256K Check" {
 
     const s = SigningMethodES256K.init(alloc);
     const token_string = try s.sign(claims, secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodES256K.init(alloc);
     var parsed = try p.parse(token_str, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.foo, claims2.object.get("foo").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.foo, claims2.value.object.get("foo").?.string);
 }
 
 test "SigningMethodEdDSA Check" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const pub_key = "587ef3ea1a58aaf3e7b368b89fdcb29b0bc1dc03e18b82f243b887393e9caed1";
     const pri_key = "414c119ae6958c5ccd7285c4894dbcd191e4942f0e14e42e8bc9631c10777b9a587ef3ea1a58aaf3e7b368b89fdcb29b0bc1dc03e18b82f243b887393e9caed1";
@@ -873,20 +912,22 @@ test "SigningMethodEdDSA Check" {
 
     const s = SigningMethodED25519.init(alloc);
     const token_string = try s.sign(claims, secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodED25519.init(alloc);
     var parsed = try p.parse(token_str, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.foo, claims2.object.get("foo").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.foo, claims2.value.object.get("foo").?.string);
 }
 
 test "SigningMethodEdDSA Check fail" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const pub_key = "587ef3ea1a58aaf3e7b368b89fdcb29b0bc1dc03e18b82f243b887393e9caed1";
     const token_str = "eyJhbGciOiJFRDI1NTE5IiwidHlwIjoiSldUIn0.eyJmb28iOiJiYXoifQ.ESuVzZq1cECrt9Od_gLPVG-_6uRP_8Nq-ajx6CtmlDqRJZqdejro2ilkqaQgSL-siE_3JMTUW7UwAorLaTyFCw";
@@ -906,11 +947,10 @@ test "SigningMethodEdDSA Check fail" {
         try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "SigningMethodHS256 Check" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const key = "0323354b2b0fa5bc837e0665777ba68f5ab328e6f054c928a90f84b2d2502ebfd3fb5a92d20647ef968ab4c377623d223d2e2172052e4f08c0cd9af567d080a3";
     const token_str = "eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
@@ -926,20 +966,22 @@ test "SigningMethodHS256 Check" {
 
     const s = SigningMethodHS256.init(alloc);
     const token_string = try s.sign(claims, key_bytes);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodHS256.init(alloc);
     var parsed = try p.parse(token_str, key_bytes);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.iss, claims2.object.get("iss").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.iss, claims2.value.object.get("iss").?.string);
 }
 
 test "SigningMethodHS384 Check" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const key = "0323354b2b0fa5bc837e0665777ba68f5ab328e6f054c928a90f84b2d2502ebfd3fb5a92d20647ef968ab4c377623d223d2e2172052e4f08c0cd9af567d080a3";
     const token_str = "eyJhbGciOiJIUzM4NCIsInR5cCI6IkpXVCJ9.eyJleHAiOjEuMzAwODE5MzhlKzA5LCJodHRwOi8vZXhhbXBsZS5jb20vaXNfcm9vdCI6dHJ1ZSwiaXNzIjoiam9lIn0.KWZEuOD5lbBxZ34g7F-SlVLAQ_r5KApWNWlZIIMyQVz5Zs58a7XdNzj5_0EcNoOy";
@@ -955,20 +997,22 @@ test "SigningMethodHS384 Check" {
 
     const s = SigningMethodHS384.init(alloc);
     const token_string = try s.sign(claims, key_bytes);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodHS384.init(alloc);
     var parsed = try p.parse(token_str, key_bytes);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.iss, claims2.object.get("iss").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.iss, claims2.value.object.get("iss").?.string);
 }
 
 test "SigningMethodHS512 Check" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const key = "0323354b2b0fa5bc837e0665777ba68f5ab328e6f054c928a90f84b2d2502ebfd3fb5a92d20647ef968ab4c377623d223d2e2172052e4f08c0cd9af567d080a3";
     const token_str = "eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJleHAiOjEuMzAwODE5MzhlKzA5LCJodHRwOi8vZXhhbXBsZS5jb20vaXNfcm9vdCI6dHJ1ZSwiaXNzIjoiam9lIn0.CN7YijRX6Aw1n2jyI2Id1w90ja-DEMYiWixhYCyHnrZ1VfJRaFQz1bEbjjA5Fn4CLYaUG432dEYmSbS4Saokmw";
@@ -984,20 +1028,22 @@ test "SigningMethodHS512 Check" {
 
     const s = SigningMethodHS512.init(alloc);
     const token_string = try s.sign(claims, key_bytes);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodHS512.init(alloc);
     var parsed = try p.parse(token_str, key_bytes);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.iss, claims2.object.get("iss").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.iss, claims2.value.object.get("iss").?.string);
 }
 
 test "SigningMethodHS256 Check fail" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const key = "0323354b2b0fa5bc837e0665777ba68f5ab328e6f054c928a90f84b2d2502ebfd3fb5a92d20647ef968ab4c377623d223d2e2172052e4f08c0cd9af567d080a3";
     const token_str = "eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXo";
@@ -1013,11 +1059,10 @@ test "SigningMethodHS256 Check fail" {
         try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "SigningMethodBLAKE2B Check" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const key = "0323354b2b0fa5bc837e0665777ba68f5ab328e6f054c928a90f84b2d2502ebfd3fb5a92d20647ef968ab4c377623d223d2e2172052e4f08c0cd9af567d080a3";
     const token_str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJCTEFLRTJCIn0.eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.zVtM3_PWCeOBjiV3bJcx1KoxeZCUs7zqfy6DF2mfb9M";
@@ -1033,6 +1078,7 @@ test "SigningMethodBLAKE2B Check" {
 
     const s = SigningMethodBLAKE2B.init(alloc);
     const token_string = try s.sign(claims, key_bytes);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
     try testing.expectEqualStrings(token_str, token_string);
 
@@ -1040,14 +1086,15 @@ test "SigningMethodBLAKE2B Check" {
 
     const p = SigningMethodBLAKE2B.init(alloc);
     var parsed = try p.parse(token_str, key_bytes);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.iss, claims2.object.get("iss").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.iss, claims2.value.object.get("iss").?.string);
 }
 
 test "SigningMethodBLAKE2B Check fail" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const key = "0323354b2b0fa5bc837e0665777ba68f5ab328e6f054c928a90f84b2d2502ebfd3fb5a92d20647ef968ab4c377623d223d2e2172052e4f08c0cd9af567d080a3";
     const token_str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJCTEFLRTJCIn0.eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.zVtM3_PWCeOBjiV3bJcx1KoxeZCUs7zqfy6DF2mfb12";
@@ -1063,21 +1110,20 @@ test "SigningMethodBLAKE2B Check fail" {
         try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "getTokenHeader" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const token_str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.feG39E-bn8HXAKhzDZq7yEAPWYDhZlwTn3sePJnU9VrGMmwdXAIEyoOnrjreYlVM_Z4N13eK9-TmMTWyfKJtHQ";
 
-    const header = try getTokenHeader(alloc, token_str);
+    var header = try getTokenHeader(alloc, token_str);
+    defer header.deinit(alloc);
     try testing.expectEqualStrings("ES256", header.alg);
-
 }
 
 test "SigningMethodES256 with JWTClaims" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const kp = ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate();
 
@@ -1088,27 +1134,32 @@ test "SigningMethodES256 with JWTClaims" {
 
     const s = SigningMethodES256.init(alloc);
     const token_string = try s.sign(claims, kp.secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodES256.init(alloc);
     var parsed = try p.parse(token_string, kp.public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud.?, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub.?, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud.?, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub.?, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodRS256" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const prikey = "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq";
     const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
 
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
 
     const secret_key = try crypto_rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
@@ -1120,27 +1171,32 @@ test "SigningMethodRS256" {
 
     const s = SigningMethodRS256.init(alloc);
     const token_string = try s.sign(claims, secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodRS256.init(alloc);
     var parsed = try p.parse(token_string, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodRS384" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const prikey = "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq";
     const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
 
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
 
     const secret_key = try crypto_rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
@@ -1152,27 +1208,32 @@ test "SigningMethodRS384" {
 
     const s = SigningMethodRS384.init(alloc);
     const token_string = try s.sign(claims, secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodRS384.init(alloc);
     var parsed = try p.parse(token_string, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodRS512" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const prikey = "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq";
     const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
 
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
 
     const secret_key = try crypto_rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
@@ -1184,27 +1245,32 @@ test "SigningMethodRS512" {
 
     const s = SigningMethodRS512.init(alloc);
     const token_string = try s.sign(claims, secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodRS512.init(alloc);
     var parsed = try p.parse(token_string, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodPS256" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const prikey = "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq";
     const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
 
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
 
     const secret_key = try crypto_rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
@@ -1216,27 +1282,32 @@ test "SigningMethodPS256" {
 
     const s = SigningMethodPS256.init(alloc);
     const token_string = try s.sign(claims, secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodPS256.init(alloc);
     var parsed = try p.parse(token_string, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodPS384" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const prikey = "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq";
     const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
 
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
 
     const secret_key = try crypto_rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
@@ -1248,27 +1319,32 @@ test "SigningMethodPS384" {
 
     const s = SigningMethodPS384.init(alloc);
     const token_string = try s.sign(claims, secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodPS384.init(alloc);
     var parsed = try p.parse(token_string, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodPS512" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const prikey = "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq";
     const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
 
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
 
     const secret_key = try crypto_rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
@@ -1280,78 +1356,91 @@ test "SigningMethodPS512" {
 
     const s = SigningMethodPS512.init(alloc);
     const token_string = try s.sign(claims, secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodPS512.init(alloc);
     var parsed = try p.parse(token_string, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodRS256 Check" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     // check data from golang-jwt
     const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
     const token_str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJmb28iOiJiYXIifQ.FhkiHkoESI_cG3NPigFrxEk9Z60_oXrOT2vGm9Pn6RDgYNovYORQmmA0zs1AoAOf09ly2Nx2YAg6ABqAYga1AcMFkJljwxTT5fYphTuqpWdy4BELeSYJx5Ty2gmr8e7RonuUztrdD5WfPqLKMm1Ozp_T6zALpRmwTIW0QPnaBXaQD90FplAg46Iy1UlDKr-Eupy0i5SLch5Q-p2ZpaL_5fnTIUDlxC3pWhJTyx_71qDI-mAA_5lE_VdroOeflG56sSmDxopPEG3bFlSu1eowyBfxtu0_CuVd-M42RU75Zc4Gsj6uV77MBtbMrf4_7M_NUTSgoIF3fRqxrj0NzihIBg";
 
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+    defer alloc.free(pubkey_bytes);
+
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
 
     const p = SigningMethodRS256.init(alloc);
     var parsed = try p.parse(token_str, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings("bar", claims2.value.object.get("foo").?.string);
 }
 
 test "SigningMethodRS384 Check" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
     const token_str = "eyJhbGciOiJSUzM4NCIsInR5cCI6IkpXVCJ9.eyJmb28iOiJiYXIifQ.W-jEzRfBigtCWsinvVVuldiuilzVdU5ty0MvpLaSaqK9PlAWWlDQ1VIQ_qSKzwL5IXaZkvZFJXT3yL3n7OUVu7zCNJzdwznbC8Z-b0z2lYvcklJYi2VOFRcGbJtXUqgjk2oGsiqUMUMOLP70TTefkpsgqDxbRh9CDUfpOJgW-dU7cmgaoswe3wjUAUi6B6G2YEaiuXC0XScQYSYVKIzgKXJV8Zw-7AN_DBUI4GkTpsvQ9fVVjZM9csQiEXhYekyrKu1nu_POpQonGd8yqkIyXPECNmmqH5jH4sFiF67XhD7_JpkvLziBpI-uh86evBUadmHhb9Otqw3uV3NTaXLzJw";
 
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+    defer alloc.free(pubkey_bytes);
+
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
 
     const p = SigningMethodRS384.init(alloc);
     var parsed = try p.parse(token_str, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings("bar", claims2.value.object.get("foo").?.string);
 }
 
 test "SigningMethodRS512 Check" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
     const token_str = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJmb28iOiJiYXIifQ.zBlLlmRrUxx4SJPUbV37Q1joRcI9EW13grnKduK3wtYKmDXbgDpF1cZ6B-2Jsm5RB8REmMiLpGms-EjXhgnyh2TSHE-9W2gA_jvshegLWtwRVDX40ODSkTb7OVuaWgiy9y7llvcknFBTIg-FnVPVpXMmeV_pvwQyhaz1SSwSPrDyxEmksz1hq7YONXhXPpGaNbMMeDTNP_1oj8DZaqTIL9TwV8_1wb2Odt_Fy58Ke2RVFijsOLdnyEAjt2n9Mxihu9i3PhNBkkxa2GbnXBfq3kzvZ_xxGGopLdHhJjcGWXO-NiwI9_tiu14NRv4L2xC0ItD9Yz68v2ZIZEp_DuzwRQ";
 
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+    defer alloc.free(pubkey_bytes);
+
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
 
     const p = SigningMethodRS512.init(alloc);
     var parsed = try p.parse(token_str, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings("bar", claims2.value.object.get("foo").?.string);
 }
 
 test "SigningMethodRS256 Check fail" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
     const token_str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJmb28iOiJiYXIifQ.EhkiHkoESI_cG3NPigFrxEk9Z60_oXrOT2vGm9Pn6RDgYNovYORQmmA0zs1AoAOf09ly2Nx2YAg6ABqAYga1AcMFkJljwxTT5fYphTuqpWdy4BELeSYJx5Ty2gmr8e7RonuUztrdD5WfPqLKMm1Ozp_T6zALpRmwTIW0QPnaBXaQD90FplAg46Iy1UlDKr-Eupy0i5SLch5Q-p2ZpaL_5fnTIUDlxC3pWhJTyx_71qDI-mAA_5lE_VdroOeflG56sSmDxopPEG3bFlSu1eowyBfxtu0_CuVd-M42RU75Zc4Gsj6uV77MBtbMrf4_7M_NUTSgoIF3fRqxrj0NzihIBg";
 
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+    defer alloc.free(pubkey_bytes);
+
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
 
     const p = SigningMethodRS256.init(alloc);
@@ -1362,67 +1451,77 @@ test "SigningMethodRS256 Check fail" {
         try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "SigningMethodPS256 Check" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
     const token_str = "eyJhbGciOiJQUzI1NiIsInR5cCI6IkpXVCJ9.eyJmb28iOiJiYXIifQ.PPG4xyDVY8ffp4CcxofNmsTDXsrVG2npdQuibLhJbv4ClyPTUtR5giNSvuxo03kB6I8VXVr0Y9X7UxhJVEoJOmULAwRWaUsDnIewQa101cVhMa6iR8X37kfFoiZ6NkS-c7henVkkQWu2HtotkEtQvN5hFlk8IevXXPmvZlhQhwzB1sGzGYnoi1zOfuL98d3BIjUjtlwii5w6gYG2AEEzp7HnHCsb3jIwUPdq86Oe6hIFjtBwduIK90ca4UqzARpcfwxHwVLMpatKask00AgGVI0ysdk0BLMjmLutquD03XbThHScC2C2_Pp4cHWgMzvbgLU2RYYZcZRKr46QeNgz9w";
 
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+    defer alloc.free(pubkey_bytes);
+
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
 
     const p = SigningMethodPS256.init(alloc);
     var parsed = try p.parse(token_str, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings("bar", claims2.value.object.get("foo").?.string);
 }
 
 test "SigningMethodPS384 Check" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
     const token_str = "eyJhbGciOiJQUzM4NCIsInR5cCI6IkpXVCJ9.eyJmb28iOiJiYXIifQ.w7-qqgj97gK4fJsq_DCqdYQiylJjzWONvD0qWWWhqEOFk2P1eDULPnqHRnjgTXoO4HAw4YIWCsZPet7nR3Xxq4ZhMqvKW8b7KlfRTb9cH8zqFvzMmybQ4jv2hKc3bXYqVow3AoR7hN_CWXI3Dv6Kd2X5xhtxRHI6IL39oTVDUQ74LACe-9t4c3QRPuj6Pq1H4FAT2E2kW_0KOc6EQhCLWEhm2Z2__OZskDC8AiPpP8Kv4k2vB7l0IKQu8Pr4RcNBlqJdq8dA5D3hk5TLxP8V5nG1Ib80MOMMqoS3FQvSLyolFX-R_jZ3-zfq6Ebsqr0yEb0AH2CfsECF7935Pa0FKQ";
 
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+    defer alloc.free(pubkey_bytes);
+
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
 
     const p = SigningMethodPS384.init(alloc);
     var parsed = try p.parse(token_str, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings("bar", claims2.value.object.get("foo").?.string);
 }
 
 test "SigningMethodPS512 Check" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
     const token_str = "eyJhbGciOiJQUzUxMiIsInR5cCI6IkpXVCJ9.eyJmb28iOiJiYXIifQ.GX1HWGzFaJevuSLavqqFYaW8_TpvcjQ8KfC5fXiSDzSiT9UD9nB_ikSmDNyDILNdtjZLSvVKfXxZJqCfefxAtiozEDDdJthZ-F0uO4SPFHlGiXszvKeodh7BuTWRI2wL9-ZO4mFa8nq3GMeQAfo9cx11i7nfN8n2YNQ9SHGovG7_T_AvaMZB_jT6jkDHpwGR9mz7x1sycckEo6teLdHRnH_ZdlHlxqknmyTu8Odr5Xh0sJFOL8BepWbbvIIn-P161rRHHiDWFv6nhlHwZnVzjx7HQrWSGb6-s2cdLie9QL_8XaMcUpjLkfOMKkDOfHo6AvpL7Jbwi83Z2ZTHjJWB-A";
 
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+    defer alloc.free(pubkey_bytes);
+
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
 
     const p = SigningMethodPS512.init(alloc);
     var parsed = try p.parse(token_str, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings("bar", claims2.value.object.get("foo").?.string);
 }
 
 test "SigningMethodPS256 Check fail" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
     const token_str = "eyJhbGciOiJQUzI1NiIsInR5cCI6IkpXVCJ9.eyJmb28iOiJiYXIifQ.PPG4xyDVY8ffp4CcxofNmsTDXsrVG2npdQuibLhJbv4ClyPTUtR5giNSvuxo03kB6I8VXVr0Y9X7UxhJVEoJOmULAwRWaUsDnIewQa101cVhMa6iR8X37kfFoiZ6NkS-c7henVkkQWu2HtotkEtQvN5hFlk8IevXXPmvZlhQhwzB1sGzGYnoi1zOfuL98d3BIjUjtlwii5w6gYG2AEEzp7HnHCsb3jIwUPdq86Oe6hIFjtBwduIK90ca4UqzARpcfwxHwVLMpatKask00AgGVI0ysdk0BLMjmLutquD03XbThHScC2C2_Pp4cHWgMzvbgLU2RYYZcZRKr46QeNgz9W";
 
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+    defer alloc.free(pubkey_bytes);
+
     const public_key = try crypto_rsa.PublicKey.fromDer(pubkey_bytes);
 
     const p = SigningMethodPS256.init(alloc);
@@ -1433,17 +1532,19 @@ test "SigningMethodPS256 Check fail" {
         try testing.expectEqual(Error.JWTVerifyFail, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "SigningMethodRS256 with pkcs8 key" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const prikey = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDh/nCDmXaEqxN416b9XjV8acmbqA52uPzKbesWQRT/BPxEO2dKAURk5CkcSBDskvfzFR9TRjeDppjD1BPSEnuYKnP0SvmotoxcnBnHMfMBqGV8DSJyppu8k4y9C3MPq5C/rA8TJm0NNaJCL0BfAGkeyw+elgYifbRlm42VfYGsKVyIeEI9Qghk5Cf8yapMPfWNLKOhChXsyGExMBMonHZeseFH7UNwonNAFJMAaelhVqqmwBFqn6fBGKmvedRO7HIaiEFNKaMna6xJ5Bccjds4MhF7UC5PIdx4Bt7CfxvjrbIRYoBF2l30CNBblIhU992zPkHoaVhDkt1gq3OdO7LvAgMBAAECggEBALCJrWTv7ahnZ3efpqAIBuogTVBd8KaHjVmokds5jehFAbdfXClwYfgaT477MNVNXYmzN1w63sTl0DIxqiYRMCFHEHuGUg6cQ3tYqb50Y2spG9XTANTlF4UxEeDfX8ue7xz7kG8aNlf6TL084iEUVgmrAJGWikZJQjGZWPmtKC3OTeJY5Bev5qHVuMRe+XEM5aQc3ph+lXlOF0Qp0Eg8YRWprrev2faH6prMqu2JGomoac6sfM4QJhtEViF7Gw0XPthPTbF19IefuAwi9psMM/9CnQ+MTWN2i6IxoUdicsFuC+Wdlb3K5V/+uldNSr+ePEhcya+YTLK9IOcVwWKQHykCgYEA8XvuEribf+t0ZPtfxr+DC9nZHXbVoFx0/ARpSG+P/fp3Hn3rO9iYQ6OtZ9mEXTzf+dhYTaRWq6PbCOz6i0It+J8QSBdxU9OcQ4871mDe41IvSc1CCGMW4PeIYtNQEK0zrqhN7SMtKyUd7yAsYRCrIzMc7NjE2qJvFw5kh7xC3Q0CgYEA75Qjn5daNYSAOa/ILdOs5J/8oIaO27RNK/fSKm/btsMsyum8+YP/mWmm1MXBzG9WEKzZv5yEKOWCEVJYVsFQsGt9yLYW2WIKU5UxiuU0F1RImF/dphIbYOh7oGC3WfYKk2f+K7ftjc196ZkEkDuE2Xh1h75/67Mzztx1DbXj6OsCgYBcDRfFfyWXb5Og4smxo1M680H2H1RzmorlfnD7sbs733wE3Y8L8xanwf7Z9WqleA0Q2k1e22RGbWGTV3JyHzoS6d90+6qxf5qzjigLIkYUdUGdambfd5ZDD1ioA1Ej6kInM/TwjlYreiyc+LCyF36FHnjKOB9iEEU0jsH3k+YRCQKBgHMVLPuHX6zfhhyvxK/Gw4FbHKYbnNoKxRs+wvThoKAtJwIdv0n4TzppVttUV2CVhrkh3sM9MvrWLGGXtZmO6Oyl5dkZJuarQpydyRuYOCqQsQKI4lbY0c/+PQxwCQMsvi3KwXxMsM7yC+6/M0L5ZDp2s7ZOGvKktVlD6vJ4Eg+bAoGARnGGprSBW8dAb/s53r0paPh4k/bySrXdGEprLwk6g3S8+aylcmjUdjcIq4dEb4A/nv12dx1Sc4y99c62R0zi+TT6FYBIFDMz3HNVzO0Jr6SgC6CNVotL0D725CioR5U1NyTHHRLZth69HLuEZCZQlPJCbePXMRRHmOl1svzcVuo=";
     const pubkey = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
 
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
 
     const secret_key = try crypto_rsa.SecretKey.fromPKCS8Der(prikey_bytes);
     const public_key = try crypto_rsa.PublicKey.fromPKCS8Der(pubkey_bytes);
@@ -1455,27 +1556,32 @@ test "SigningMethodRS256 with pkcs8 key" {
 
     const s = SigningMethodRS256.init(alloc);
     const token_string = try s.sign(claims, secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodRS256.init(alloc);
     var parsed = try p.parse(token_string, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodPS256 with pkcs8 key" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const prikey = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDh/nCDmXaEqxN416b9XjV8acmbqA52uPzKbesWQRT/BPxEO2dKAURk5CkcSBDskvfzFR9TRjeDppjD1BPSEnuYKnP0SvmotoxcnBnHMfMBqGV8DSJyppu8k4y9C3MPq5C/rA8TJm0NNaJCL0BfAGkeyw+elgYifbRlm42VfYGsKVyIeEI9Qghk5Cf8yapMPfWNLKOhChXsyGExMBMonHZeseFH7UNwonNAFJMAaelhVqqmwBFqn6fBGKmvedRO7HIaiEFNKaMna6xJ5Bccjds4MhF7UC5PIdx4Bt7CfxvjrbIRYoBF2l30CNBblIhU992zPkHoaVhDkt1gq3OdO7LvAgMBAAECggEBALCJrWTv7ahnZ3efpqAIBuogTVBd8KaHjVmokds5jehFAbdfXClwYfgaT477MNVNXYmzN1w63sTl0DIxqiYRMCFHEHuGUg6cQ3tYqb50Y2spG9XTANTlF4UxEeDfX8ue7xz7kG8aNlf6TL084iEUVgmrAJGWikZJQjGZWPmtKC3OTeJY5Bev5qHVuMRe+XEM5aQc3ph+lXlOF0Qp0Eg8YRWprrev2faH6prMqu2JGomoac6sfM4QJhtEViF7Gw0XPthPTbF19IefuAwi9psMM/9CnQ+MTWN2i6IxoUdicsFuC+Wdlb3K5V/+uldNSr+ePEhcya+YTLK9IOcVwWKQHykCgYEA8XvuEribf+t0ZPtfxr+DC9nZHXbVoFx0/ARpSG+P/fp3Hn3rO9iYQ6OtZ9mEXTzf+dhYTaRWq6PbCOz6i0It+J8QSBdxU9OcQ4871mDe41IvSc1CCGMW4PeIYtNQEK0zrqhN7SMtKyUd7yAsYRCrIzMc7NjE2qJvFw5kh7xC3Q0CgYEA75Qjn5daNYSAOa/ILdOs5J/8oIaO27RNK/fSKm/btsMsyum8+YP/mWmm1MXBzG9WEKzZv5yEKOWCEVJYVsFQsGt9yLYW2WIKU5UxiuU0F1RImF/dphIbYOh7oGC3WfYKk2f+K7ftjc196ZkEkDuE2Xh1h75/67Mzztx1DbXj6OsCgYBcDRfFfyWXb5Og4smxo1M680H2H1RzmorlfnD7sbs733wE3Y8L8xanwf7Z9WqleA0Q2k1e22RGbWGTV3JyHzoS6d90+6qxf5qzjigLIkYUdUGdambfd5ZDD1ioA1Ej6kInM/TwjlYreiyc+LCyF36FHnjKOB9iEEU0jsH3k+YRCQKBgHMVLPuHX6zfhhyvxK/Gw4FbHKYbnNoKxRs+wvThoKAtJwIdv0n4TzppVttUV2CVhrkh3sM9MvrWLGGXtZmO6Oyl5dkZJuarQpydyRuYOCqQsQKI4lbY0c/+PQxwCQMsvi3KwXxMsM7yC+6/M0L5ZDp2s7ZOGvKktVlD6vJ4Eg+bAoGARnGGprSBW8dAb/s53r0paPh4k/bySrXdGEprLwk6g3S8+aylcmjUdjcIq4dEb4A/nv12dx1Sc4y99c62R0zi+TT6FYBIFDMz3HNVzO0Jr6SgC6CNVotL0D725CioR5U1NyTHHRLZth69HLuEZCZQlPJCbePXMRRHmOl1svzcVuo=";
     const pubkey = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
 
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
 
     const secret_key = try crypto_rsa.SecretKey.fromPKCS8Der(prikey_bytes);
     const public_key = try crypto_rsa.PublicKey.fromPKCS8Der(pubkey_bytes);
@@ -1487,55 +1593,63 @@ test "SigningMethodPS256 with pkcs8 key" {
 
     const s = SigningMethodPS256.init(alloc);
     const token_string = try s.sign(claims, secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodPS256.init(alloc);
     var parsed = try p.parse(token_string, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
 test "SigningMethodRS256 Check with pkcs8 key" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const pubkey = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
     const token_str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJmb28iOiJiYXIifQ.FhkiHkoESI_cG3NPigFrxEk9Z60_oXrOT2vGm9Pn6RDgYNovYORQmmA0zs1AoAOf09ly2Nx2YAg6ABqAYga1AcMFkJljwxTT5fYphTuqpWdy4BELeSYJx5Ty2gmr8e7RonuUztrdD5WfPqLKMm1Ozp_T6zALpRmwTIW0QPnaBXaQD90FplAg46Iy1UlDKr-Eupy0i5SLch5Q-p2ZpaL_5fnTIUDlxC3pWhJTyx_71qDI-mAA_5lE_VdroOeflG56sSmDxopPEG3bFlSu1eowyBfxtu0_CuVd-M42RU75Zc4Gsj6uV77MBtbMrf4_7M_NUTSgoIF3fRqxrj0NzihIBg";
 
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+    defer alloc.free(pubkey_bytes);
+
     const public_key = try crypto_rsa.PublicKey.fromPKCS8Der(pubkey_bytes);
 
     const p = SigningMethodRS256.init(alloc);
     var parsed = try p.parse(token_str, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings("bar", claims2.value.object.get("foo").?.string);
 }
 
 test "SigningMethodPS256 Check with pkcs8 key" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const pubkey = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
     const token_str = "eyJhbGciOiJQUzI1NiIsInR5cCI6IkpXVCJ9.eyJmb28iOiJiYXIifQ.PPG4xyDVY8ffp4CcxofNmsTDXsrVG2npdQuibLhJbv4ClyPTUtR5giNSvuxo03kB6I8VXVr0Y9X7UxhJVEoJOmULAwRWaUsDnIewQa101cVhMa6iR8X37kfFoiZ6NkS-c7henVkkQWu2HtotkEtQvN5hFlk8IevXXPmvZlhQhwzB1sGzGYnoi1zOfuL98d3BIjUjtlwii5w6gYG2AEEzp7HnHCsb3jIwUPdq86Oe6hIFjtBwduIK90ca4UqzARpcfwxHwVLMpatKask00AgGVI0ysdk0BLMjmLutquD03XbThHScC2C2_Pp4cHWgMzvbgLU2RYYZcZRKr46QeNgz9w";
 
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+    defer alloc.free(pubkey_bytes);
+
     const public_key = try crypto_rsa.PublicKey.fromPKCS8Der(pubkey_bytes);
 
     const p = SigningMethodPS256.init(alloc);
     var parsed = try p.parse(token_str, public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings("bar", claims2.object.get("foo").?.string);
-
+    defer claims2.deinit();
+    try testing.expectEqualStrings("bar", claims2.value.object.get("foo").?.string);
 }
 
 test "SigningMethodEdDSA type" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const kp = eddsa.Ed25519.KeyPair.generate();
 
@@ -1549,25 +1663,28 @@ test "SigningMethodEdDSA type" {
 
     const s = SigningMethodEdDSA.init(alloc);
     const token_string = try s.signWithHeader(headers, claims, kp.secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
 
     const p = SigningMethodEdDSA.init(alloc);
     var parsed = try p.parse(token_string, kp.public_key);
+    defer parsed.deinit();
 
     const claims2 = try parsed.getClaims();
-    try testing.expectEqualStrings(claims.aud, claims2.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.sub, claims2.object.get("sub").?.string);
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 
-    const headers2 = try parsed.getHeader();
+    var headers2 = try parsed.getHeader();
+    defer headers2.deinit(alloc);
     try testing.expectEqualStrings("", headers2.typ);
     try testing.expectEqualStrings(headers.alg, headers2.alg);
-
 }
 
 test "SigningMethodEdDSA JWTTypeInvalid" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const kp = eddsa.Ed25519.KeyPair.generate();
 
@@ -1582,6 +1699,7 @@ test "SigningMethodEdDSA JWTTypeInvalid" {
 
     const s = SigningMethodEdDSA.init(alloc);
     const token_string = try s.signWithHeader(headers, claims, kp.secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -1594,11 +1712,10 @@ test "SigningMethodEdDSA JWTTypeInvalid" {
         try testing.expectEqual(Error.JWTTypeInvalid, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
 
 test "SigningMethodEdDSA JWTAlgoInvalid" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const kp = ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate();
 
@@ -1613,6 +1730,7 @@ test "SigningMethodEdDSA JWTAlgoInvalid" {
 
     const s = SigningMethodES256.init(alloc);
     const token_string = try s.signWithHeader(headers, claims, kp.secret_key);
+    defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
     // ==========
@@ -1625,6 +1743,4 @@ test "SigningMethodEdDSA JWTAlgoInvalid" {
         try testing.expectEqual(Error.JWTAlgoInvalid, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
-

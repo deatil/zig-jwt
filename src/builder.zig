@@ -14,7 +14,7 @@ pub fn Builder(comptime Signer: type, comptime SecretKeyType: type) type {
         signer: Signer,
         headers: Values,
         claims: Values,
-        alloc: Allocator, 
+        alloc: Allocator,
 
         const Self = @This();
 
@@ -66,18 +66,22 @@ pub fn Builder(comptime Signer: type, comptime SecretKeyType: type) type {
                 header = try self.getHeaders();
             }
 
+            defer self.alloc.free(header);
+
             const claims = try self.getClaims();
-            
+            defer self.alloc.free(claims);
+
             var t = Token.init(self.alloc);
-            t.withHeader(header);
-            t.withClaims(claims);
+            try t.withHeader(header);
+            try t.withClaims(claims);
 
             const signing_string = try t.signingString();
             defer self.alloc.free(signing_string);
 
             const signature = try self.signer.sign(signing_string, secret_key);
+            defer self.alloc.free(signature);
 
-            t.withSignature(signature);
+            try t.withSignature(signature);
 
             return t;
         }
@@ -139,14 +143,13 @@ pub const Data = struct {
         try self.stream.objectField(name);
         try self.stream.write(value);
     }
-
 };
 
 test "Data" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     var value = Values.init(alloc);
-    
+
     var b = Data.init(&value);
     defer b.deinit();
 
@@ -161,20 +164,22 @@ test "Data" {
     try b.setData("foo", "bar");
     try b.end();
 
-    const check = 
+    const check =
         \\{"aud":"permitted_for","exp":1567842388,"jti":"identified_by","iat":1567842389,"iss":"issued_by","nbf":1567842387,"sub":"related_to","foo":"bar"}
     ;
 
     const claims = try value.toOwnedSlice();
-    try testing.expectEqualStrings(check, claims);
 
+    defer alloc.free(claims);
+
+    try testing.expectEqualStrings(check, claims);
 }
 
 test "Data 2" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     var value = Values.init(alloc);
-    
+
     var b = Data.init(&value);
     defer b.deinit();
 
@@ -183,17 +188,19 @@ test "Data 2" {
     try b.setData("alg", "ES256");
     try b.end();
 
-    const check = 
+    const check =
         \\{"typ":"JWT","alg":"ES256"}
     ;
 
     const claims = try value.toOwnedSlice();
-    try testing.expectEqualStrings(check, claims);
 
+    defer alloc.free(claims);
+
+    try testing.expectEqualStrings(check, claims);
 }
 
 test "Builder" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     var build = Builder(eddsa.SigningEdDSA, eddsa.Ed25519.SecretKey).init(alloc);
     defer build.deinit();
@@ -212,11 +219,14 @@ test "Builder" {
     try b.setData("foo", "bar");
     try b.end();
 
-    const check = 
+    const check =
         \\{"aud":"permitted_for","exp":1567842388,"jti":"identified_by","iat":1567842389,"iss":"issued_by","nbf":1567842387,"sub":"related_to","foo":"bar"}
     ;
 
     const claims = try build.getClaims();
+
+    defer alloc.free(claims);
+
     try testing.expectEqualStrings(check, claims);
 
     // =======
@@ -229,11 +239,12 @@ test "Builder" {
     try h.setData("alg", "HS256");
     try h.end();
 
-    const check2 = 
+    const check2 =
         \\{"typ":"JWT","alg":"HS256"}
     ;
 
     const claims2 = try build.getHeaders();
+    defer alloc.free(claims2);
     try testing.expectEqualStrings(check2, claims2);
 
     // =======
@@ -242,16 +253,20 @@ test "Builder" {
 
     var t = try build.getToken(kp.secret_key);
     const token_string = try t.signedString();
+
+    defer t.deinit();
+    defer alloc.free(token_string);
+
     try testing.expectEqual(true, token_string.len > 0);
 
-    const check3 = 
+    const check3 =
         \\{"typ":"JWT","alg":"HS256"}
     ;
     try testing.expectEqualStrings(check3, t.header);
 }
 
 test "Builder 2" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     var build = Builder(eddsa.SigningEdDSA, eddsa.Ed25519.SecretKey).init(alloc);
     defer build.deinit();
@@ -282,12 +297,15 @@ test "Builder 2" {
 
     var t = try build.getToken(kp.secret_key);
     const token_string = try t.signedString();
-    try testing.expectEqual(true, token_string.len > 0);
 
+    defer t.deinit();
+    defer alloc.free(token_string);
+
+    try testing.expectEqual(true, token_string.len > 0);
 }
 
 test "Builder 3" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     var build = Builder(eddsa.SigningEdDSA, eddsa.Ed25519.SecretKey).init(alloc);
     defer build.deinit();
@@ -306,11 +324,14 @@ test "Builder 3" {
     try b.setData("foo", "bar");
     try b.end();
 
-    const check = 
+    const check =
         \\{"aud":"permitted_for","exp":1567842388,"jti":"identified_by","iat":1567842389,"iss":"issued_by","nbf":1567842387,"sub":"related_to","foo":"bar"}
     ;
 
     const claims = try build.getClaims();
+
+    defer alloc.free(claims);
+
     try testing.expectEqualStrings(check, claims);
 
     // =======
@@ -319,9 +340,13 @@ test "Builder 3" {
 
     var t = try build.getToken(kp.secret_key);
     const token_string = try t.signedString();
+
+    defer t.deinit();
+    defer alloc.free(token_string);
+
     try testing.expectEqual(true, token_string.len > 0);
 
-    const check3 = 
+    const check3 =
         \\{"typ":"JWT","alg":"EdDSA"}
     ;
     try testing.expectEqualStrings(check3, t.header);

@@ -13,7 +13,7 @@ pub const SigningHS512 = SignHmac(hmac.sha2.HmacSha512, "HS512");
 
 pub fn SignHmac(comptime Hash: type, comptime name: []const u8) type {
     return struct {
-        alloc: Allocator, 
+        alloc: Allocator,
 
         const Self = @This();
 
@@ -50,9 +50,9 @@ pub fn SignHmac(comptime Hash: type, comptime name: []const u8) type {
             if (signature.len != sign_length) {
                 return false;
             }
-                        
+
             var out: [mac_length]u8 = undefined;
- 
+
             var h = Hash.init(key);
             h.update(msg[0..]);
             h.final(out[0..]);
@@ -67,7 +67,7 @@ pub fn SignHmac(comptime Hash: type, comptime name: []const u8) type {
 }
 
 test "SigningHMD5" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
     const h = SigningHMD5.init(alloc);
 
     const alg = h.alg();
@@ -80,6 +80,7 @@ test "SigningHMD5" {
     const sign = "e2e8b98014f740a7c2e19152c24534b2";
 
     const signed = try h.sign(msg, key);
+    defer alloc.free(signed);
 
     var signature2: [16]u8 = undefined;
     @memcpy(signature2[0..], signed);
@@ -90,11 +91,10 @@ test "SigningHMD5" {
     const veri = h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
-
 }
 
 test "SigningHSHA1" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
     const h = SigningHSHA1.init(alloc);
 
     const alg = h.alg();
@@ -107,6 +107,7 @@ test "SigningHSHA1" {
     const sign = "4106aea97422ce36d01edb8deb52a7841f0234e5";
 
     const signed = try h.sign(msg, key);
+    defer alloc.free(signed);
 
     var signature2: [20]u8 = undefined;
     @memcpy(signature2[0..], signed);
@@ -117,11 +118,10 @@ test "SigningHSHA1" {
     const veri = h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
-
 }
 
 test "SigningHS224" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
     const h = SigningHS224.init(alloc);
 
     const alg = h.alg();
@@ -134,6 +134,7 @@ test "SigningHS224" {
     const sign = "ed6ef737f62e606c28d27a7c586b23becae7196fd4c7b141b46c9902";
 
     const signed = try h.sign(msg, key);
+    defer alloc.free(signed);
 
     var signature2: [28]u8 = undefined;
     @memcpy(signature2[0..], signed);
@@ -144,11 +145,10 @@ test "SigningHS224" {
     const veri = h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
-
 }
 
 test "SigningHS256" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
     const h = SigningHS256.init(alloc);
 
     const alg = h.alg();
@@ -161,6 +161,7 @@ test "SigningHS256" {
     const sign = "21a286fd6fd9f52676007c66d0f883db46d06158c266d33fb537c23bc618e567";
 
     const signed = try h.sign(msg, key);
+    defer alloc.free(signed);
 
     var signature2: [32]u8 = undefined;
     @memcpy(signature2[0..], signed);
@@ -171,11 +172,10 @@ test "SigningHS256" {
     const veri = h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
-
 }
 
 test "SigningHS384" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
     const h = SigningHS384.init(alloc);
 
     const alg = h.alg();
@@ -188,6 +188,8 @@ test "SigningHS384" {
     const sign = "7ef9106e87232142b352343c291d323498d8a8426029181ddf61a65d0f1bc2c497c86a1091f66d97c2179a18d6e67bdf";
 
     const signed = try h.sign(msg, key);
+    defer alloc.free(signed);
+
     var signature2: [48]u8 = undefined;
     @memcpy(signature2[0..], signed);
     const singed_res = fmt.bytesToHex(signature2, .lower);
@@ -197,11 +199,10 @@ test "SigningHS384" {
     const veri = h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
-
 }
 
 test "SigningHS512" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
     const h = SigningHS512.init(alloc);
 
     const alg = h.alg();
@@ -214,6 +215,8 @@ test "SigningHS512" {
     const sign = "080e166f475f1c5d61f26b94d45a0cd822729a525e3a3865b87cdf58a36f039ea1948735aab3ad5027d553ad06487fb57d3a9034d2861300297d6cebf838f5bf";
 
     const signed = try h.sign(msg, key);
+    defer alloc.free(signed);
+
     var signature2: [64]u8 = undefined;
     @memcpy(signature2[0..], signed);
     const singed_res = fmt.bytesToHex(signature2, .lower);
@@ -223,5 +226,4 @@ test "SigningHS512" {
     const veri = h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
-
 }

@@ -7,7 +7,7 @@ pub const SigningNone = SignNone("none");
 
 pub fn SignNone(comptime name: []const u8) type {
     return struct {
-        alloc: Allocator, 
+        alloc: Allocator,
 
         const Self = @This();
 
@@ -34,7 +34,7 @@ pub fn SignNone(comptime name: []const u8) type {
             _ = msg;
             _ = key;
 
-            const out: []u8 = undefined;
+            const out = "";
             return out;
         }
 
@@ -53,7 +53,7 @@ pub fn SignNone(comptime name: []const u8) type {
 }
 
 test "SigningNone" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
     const h = SigningNone.init(alloc);
 
     const alg = h.alg();
@@ -64,6 +64,8 @@ test "SigningNone" {
     const msg = "test-data";
 
     const signed = try h.sign(msg, "");
+    defer alloc.free(signed);
+
     try testing.expectEqual(0, signed.len);
 
     const veri = h.verify(msg, signed, "");
@@ -73,5 +75,4 @@ test "SigningNone" {
     const signed2: []u8 = &buf2;
     const veri2 = h.verify(msg, signed2[0..], "");
     try testing.expectEqual(false, veri2);
-
 }

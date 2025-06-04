@@ -14,7 +14,7 @@ pub const SigningED25519 = SignEdDSA("ED25519");
 
 pub fn SignEdDSA(comptime name: []const u8) type {
     return struct {
-        alloc: Allocator, 
+        alloc: Allocator,
 
         const Self = @This();
 
@@ -50,7 +50,7 @@ pub fn SignEdDSA(comptime name: []const u8) type {
             if (signature.len != sign_length) {
                 return false;
             }
-            
+
             var signed: [encoded_length]u8 = undefined;
             @memcpy(signed[0..], signature);
 
@@ -74,7 +74,7 @@ pub fn parseSecretKeyDer(bytes: []const u8) !Ed25519.SecretKey {
     if (version != 0) {
         return error.JWTEdDSAPKCS8VersionError;
     }
-    
+
     const oid_seq = try parser.expectSequence();
     const oid = try parser.expectOid();
 
@@ -90,7 +90,7 @@ pub fn parseSecretKeyDer(bytes: []const u8) !Ed25519.SecretKey {
     if (parse_prikey_bytes.len != Ed25519.KeyPair.seed_length) {
         return error.JWTEdDSASecretKeyBytesLengthError;
     }
-    
+
     var seed: [Ed25519.KeyPair.seed_length]u8 = undefined;
     @memcpy(seed[0..], parse_prikey_bytes);
 
@@ -138,13 +138,16 @@ fn checkEdDSAPublickeyOid(oid: []const u8) !void {
 }
 
 test "SigningEdDSA with der key" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const prikey = "MC4CAQAwBQYDK2VwBCIEIE7YvvGJzvKQ3uZOQ6qAPkRsK7nkpmjPOaqsZKqrFQMw";
     const pubkey = "MCowBQYDK2VwAyEAgbbl7UO5W8ZMmOm+Kw9X2y9PyblBTDcZIRaR/kDFoA0=";
 
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
 
     const secret_key = try parseSecretKeyDer(prikey_bytes);
     const public_key = try parsePublicKeyDer(pubkey_bytes);
@@ -153,6 +156,7 @@ test "SigningEdDSA with der key" {
 
     const h = SigningEdDSA.init(alloc);
     const signed = try h.sign(msg, secret_key);
+    defer alloc.free(signed);
 
     try testing.expectEqual(64, signed.len);
 
@@ -162,7 +166,7 @@ test "SigningEdDSA with der key" {
 }
 
 test "SigningEdDSA" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const h = SigningEdDSA.init(alloc);
 
@@ -176,17 +180,17 @@ test "SigningEdDSA" {
     const msg = "test-data";
 
     const signed = try h.sign(msg, kp.secret_key);
+    defer alloc.free(signed);
 
     try testing.expectEqual(64, signed.len);
 
     const veri = h.verify(msg, signed, kp.public_key);
 
     try testing.expectEqual(true, veri);
-
 }
 
 test "SigningED25519" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const h = SigningED25519.init(alloc);
 
@@ -200,11 +204,11 @@ test "SigningED25519" {
     const msg = "test-data";
 
     const signed = try h.sign(msg, kp.secret_key);
+    defer alloc.free(signed);
 
     try testing.expectEqual(64, signed.len);
 
     const veri = h.verify(msg, signed, kp.public_key);
 
     try testing.expectEqual(true, veri);
-
 }

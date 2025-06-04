@@ -38,8 +38,8 @@ pub const PublicKey = struct {
             if (n.v.compare(e.v) == .lt) return error.Exponent;
         }
 
-        return .{ 
-            .n = n, 
+        return .{
+            .n = n,
             .e = e,
         };
     }
@@ -83,7 +83,7 @@ pub const PublicKey = struct {
         };
 
         return pk;
-    } 
+    }
 
     /// Encrypt a short message using RSAES-PKCS1-v1_5.
     pub fn encryptPkcsv1_5(self: Self, msg: []const u8, out: []u8) ![]const u8 {
@@ -169,7 +169,7 @@ pub const SecretKey = struct {
 
     pub fn fromBytes(n: []const u8, e: []const u8, dbytes: []const u8, p: Fe, q: Fe) !SecretKey {
         const public = try PublicKey.fromBytes(n, e);
-    
+
         const d = try Fe.fromBytes(public.n, dbytes, .big);
 
         // > The RSA private exponent d is a positive integer less than n
@@ -177,10 +177,10 @@ pub const SecretKey = struct {
         if (!d.isOdd()) return error.Exponent;
         if (d.v.compare(public.n.v) != .lt) return error.Exponent;
 
-        const primes = [2]Fe{p, q};
-        
-        return .{ 
-            .public_key = public, 
+        const primes = [2]Fe{ p, q };
+
+        return .{
+            .public_key = public,
             .d = d,
             .primes = primes,
         };
@@ -272,7 +272,7 @@ pub const SecretKey = struct {
         };
 
         return sk;
-    } 
+    }
 
     pub fn decryptPkcsv1_5(self: Self, ciphertext: []const u8, out: []u8) ![]const u8 {
         const k = byteLen(self.public_key.n.bits());
@@ -380,12 +380,12 @@ pub const SecretKey = struct {
 
             .crt_values = [2]CRTValue{
                 .{
-                    .exp = Modulus.one(), 
+                    .exp = Modulus.one(),
                     .coeff = Modulus.one(),
                     .t = Modulus.one(),
                 },
                 .{
-                    .exp = Modulus.one(), 
+                    .exp = Modulus.one(),
                     .coeff = Modulus.one(),
                     .t = Modulus.one(),
                 },
@@ -404,8 +404,8 @@ pub const KeyPair = struct {
 
     /// Return the public key corresponding to the secret key.
     pub fn fromSecretKey(secret_key: SecretKey) !KeyPair {
-        return .{ 
-            .secret_key = secret_key, 
+        return .{
+            .secret_key = secret_key,
             .public_key = secret_key.public_key,
         };
     }
@@ -425,7 +425,7 @@ pub const KeyPair = struct {
         comptime Hash: type,
         msg: []const u8,
         salt: ?[]const u8,
-        out: []u8, 
+        out: []u8,
     ) !Pss(Hash).Signature {
         var st = try self.signerOaep(Hash, salt);
         st.update(msg);
@@ -436,7 +436,6 @@ pub const KeyPair = struct {
     pub fn signerOaep(self: Self, comptime Hash: type, salt: ?[]const u8) !Pss(Hash).Signer {
         return Pss(Hash).Signer.init(self.secret_key, salt);
     }
-
 };
 
 pub const PrecomputedValues = struct {
@@ -1151,7 +1150,6 @@ test "rsa PKCS1-v1_5 encrypt and decrypt" {
     const dec2 = try kp.secret_key.decryptPkcsv1_5(enc2_res, &out22);
 
     try std.testing.expectEqualSlices(u8, msg, dec2);
-
 }
 
 test "rsa OAEP encrypt and decrypt" {
@@ -1177,7 +1175,6 @@ test "rsa OAEP encrypt and decrypt" {
     const dec2 = try kp.secret_key.decryptOaep(TestHash, enc2_res, label, &out22);
 
     try std.testing.expectEqualSlices(u8, msg, dec2);
-
 }
 
 test "rsa PKCS1-v1_5 signature" {
@@ -1240,7 +1237,6 @@ test "rsa PSS signature" {
 
     const signature2 = Pss(TestHash).Signature.fromBytes(sig2_res);
     try signature2.verify(msg, kp.public_key, null);
-
 }
 
 fn base64Decode(alloc: Allocator, input: []const u8) ![]const u8 {
@@ -1256,13 +1252,16 @@ fn base64Decode(alloc: Allocator, input: []const u8) ![]const u8 {
 }
 
 test "Signer with pkcs8 key" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const prikey = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDh/nCDmXaEqxN416b9XjV8acmbqA52uPzKbesWQRT/BPxEO2dKAURk5CkcSBDskvfzFR9TRjeDppjD1BPSEnuYKnP0SvmotoxcnBnHMfMBqGV8DSJyppu8k4y9C3MPq5C/rA8TJm0NNaJCL0BfAGkeyw+elgYifbRlm42VfYGsKVyIeEI9Qghk5Cf8yapMPfWNLKOhChXsyGExMBMonHZeseFH7UNwonNAFJMAaelhVqqmwBFqn6fBGKmvedRO7HIaiEFNKaMna6xJ5Bccjds4MhF7UC5PIdx4Bt7CfxvjrbIRYoBF2l30CNBblIhU992zPkHoaVhDkt1gq3OdO7LvAgMBAAECggEBALCJrWTv7ahnZ3efpqAIBuogTVBd8KaHjVmokds5jehFAbdfXClwYfgaT477MNVNXYmzN1w63sTl0DIxqiYRMCFHEHuGUg6cQ3tYqb50Y2spG9XTANTlF4UxEeDfX8ue7xz7kG8aNlf6TL084iEUVgmrAJGWikZJQjGZWPmtKC3OTeJY5Bev5qHVuMRe+XEM5aQc3ph+lXlOF0Qp0Eg8YRWprrev2faH6prMqu2JGomoac6sfM4QJhtEViF7Gw0XPthPTbF19IefuAwi9psMM/9CnQ+MTWN2i6IxoUdicsFuC+Wdlb3K5V/+uldNSr+ePEhcya+YTLK9IOcVwWKQHykCgYEA8XvuEribf+t0ZPtfxr+DC9nZHXbVoFx0/ARpSG+P/fp3Hn3rO9iYQ6OtZ9mEXTzf+dhYTaRWq6PbCOz6i0It+J8QSBdxU9OcQ4871mDe41IvSc1CCGMW4PeIYtNQEK0zrqhN7SMtKyUd7yAsYRCrIzMc7NjE2qJvFw5kh7xC3Q0CgYEA75Qjn5daNYSAOa/ILdOs5J/8oIaO27RNK/fSKm/btsMsyum8+YP/mWmm1MXBzG9WEKzZv5yEKOWCEVJYVsFQsGt9yLYW2WIKU5UxiuU0F1RImF/dphIbYOh7oGC3WfYKk2f+K7ftjc196ZkEkDuE2Xh1h75/67Mzztx1DbXj6OsCgYBcDRfFfyWXb5Og4smxo1M680H2H1RzmorlfnD7sbs733wE3Y8L8xanwf7Z9WqleA0Q2k1e22RGbWGTV3JyHzoS6d90+6qxf5qzjigLIkYUdUGdambfd5ZDD1ioA1Ej6kInM/TwjlYreiyc+LCyF36FHnjKOB9iEEU0jsH3k+YRCQKBgHMVLPuHX6zfhhyvxK/Gw4FbHKYbnNoKxRs+wvThoKAtJwIdv0n4TzppVttUV2CVhrkh3sM9MvrWLGGXtZmO6Oyl5dkZJuarQpydyRuYOCqQsQKI4lbY0c/+PQxwCQMsvi3KwXxMsM7yC+6/M0L5ZDp2s7ZOGvKktVlD6vJ4Eg+bAoGARnGGprSBW8dAb/s53r0paPh4k/bySrXdGEprLwk6g3S8+aylcmjUdjcIq4dEb4A/nv12dx1Sc4y99c62R0zi+TT6FYBIFDMz3HNVzO0Jr6SgC6CNVotL0D725CioR5U1NyTHHRLZth69HLuEZCZQlPJCbePXMRRHmOl1svzcVuo=";
     const pubkey = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
 
     const prikey_bytes = try base64Decode(alloc, prikey);
     const pubkey_bytes = try base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
 
     const pri_key = try SecretKey.fromPKCS8Der(prikey_bytes);
     const pub_key = try PublicKey.fromPKCS8Der(pubkey_bytes);
@@ -1278,7 +1277,6 @@ test "Signer with pkcs8 key" {
     try testing.expectEqual(true, signed_bytes.len > 0);
 
     try signed.verify(msg, pub_key, null);
-
 }
 
 test "Signer with pkcs8 key or pkcs1 key" {
@@ -1300,10 +1298,13 @@ test "Signer with pkcs8 key or pkcs1 key" {
 }
 
 fn test_sign_with_key_der(prikey: []const u8, pubkey: []const u8) !void {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const prikey_bytes = try base64Decode(alloc, prikey);
     const pubkey_bytes = try base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
 
     const pri_key = try SecretKey.fromDerAuto(prikey_bytes);
     const pub_key = try PublicKey.fromDerAuto(pubkey_bytes);
@@ -1319,5 +1320,4 @@ fn test_sign_with_key_der(prikey: []const u8, pubkey: []const u8) !void {
     try testing.expectEqual(true, signed_bytes.len > 0);
 
     try signed.verify(msg, pub_key, null);
-
 }

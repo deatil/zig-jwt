@@ -18,7 +18,7 @@ pub const SigningRS512 = SignRSA(RsaSha512, "RS512");
 
 pub fn SignRSA(comptime RSAType: type, comptime name: []const u8) type {
     return struct {
-        alloc: Allocator, 
+        alloc: Allocator,
 
         const Self = @This();
 
@@ -46,7 +46,7 @@ pub fn SignRSA(comptime RSAType: type, comptime name: []const u8) type {
 
             var out: [max_modulus_len]u8 = undefined;
             const sig = try signer.finalize(&out);
-            
+
             const signed = sig.toBytes();
 
             return self.alloc.dupe(u8, signed[0..]);
@@ -66,7 +66,7 @@ pub fn SignRSA(comptime RSAType: type, comptime name: []const u8) type {
 }
 
 test "SigningRS256" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const h = SigningRS256.init(alloc);
 
@@ -81,23 +81,26 @@ test "SigningRS256" {
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
 
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
+
     const secret_key = try rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try rsa.PublicKey.fromDer(pubkey_bytes);
 
     const msg = "test-data";
 
     const signed = try h.sign(msg, secret_key);
+    defer alloc.free(signed);
 
     try testing.expectEqual(256, signed.len);
 
     const veri = h.verify(msg, signed, public_key);
 
     try testing.expectEqual(true, veri);
-
 }
 
 test "SigningRS384" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const h = SigningRS384.init(alloc);
 
@@ -112,23 +115,26 @@ test "SigningRS384" {
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
 
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
+
     const secret_key = try rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try rsa.PublicKey.fromDer(pubkey_bytes);
 
     const msg = "test-data";
 
     const signed = try h.sign(msg, secret_key);
+    defer alloc.free(signed);
 
     try testing.expectEqual(256, signed.len);
 
     const veri = h.verify(msg, signed, public_key);
 
     try testing.expectEqual(true, veri);
-
 }
 
 test "SigningRS512" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const h = SigningRS512.init(alloc);
 
@@ -143,23 +149,26 @@ test "SigningRS512" {
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
 
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
+
     const secret_key = try rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try rsa.PublicKey.fromDer(pubkey_bytes);
 
     const msg = "test-data";
 
     const signed = try h.sign(msg, secret_key);
+    defer alloc.free(signed);
 
     try testing.expectEqual(256, signed.len);
 
     const veri = h.verify(msg, signed, public_key);
 
     try testing.expectEqual(true, veri);
-
 }
 
 test "SigningRS256 check" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const h = SigningRS256.init(alloc);
 
@@ -174,12 +183,16 @@ test "SigningRS256 check" {
     const prikey_bytes = try utils.base64Decode(alloc, prikey);
     const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
 
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
+
     const secret_key = try rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try rsa.PublicKey.fromDer(pubkey_bytes);
 
     const msg = "test-data";
 
     const signed = try h.sign(msg, secret_key);
+    defer alloc.free(signed);
 
     var buf: [256]u8 = undefined;
     @memcpy(buf[0..], signed);
@@ -201,5 +214,4 @@ test "SigningRS256 check" {
 
     const veri2 = h.verify(msg, res, public_key);
     try testing.expectEqual(false, veri2);
-
 }

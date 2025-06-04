@@ -77,6 +77,7 @@ pub fn main() !void {
 
     const s = jwt.SigningMethodEdDSA.init(alloc);
     const token_string = try s.sign(claims, kp.secret_key);
+    defer alloc.free(token_string);
     
     // output: 
     // make jwt: eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJleGFtcGxlLmNvbSIsInN1YiI6ImZvbyJ9.8aYTV-9_Z1RQUPepUlut9gvniX_Cx_z8P60Z5FbnMMgNLPNP29ZtNG3k6pcU2TY_O3DkSsdxbN2HkmgvjDUPBg
@@ -84,11 +85,13 @@ pub fn main() !void {
 
     const p = jwt.SigningMethodEdDSA.init(alloc);
     var token = try p.parse(token_string, kp.public_key);
+    defer p.deinit();
     
     // output: 
     // claims aud: example.com
     const claims2 = try token.getClaims();
-    std.debug.print("claims aud: {s} \n", .{claims2.object.get("aud").?.string});
+    defer claims2.deinit();
+    std.debug.print("claims aud: {s} \n", .{claims2.value.object.get("aud").?.string});
 }
 ~~~
 

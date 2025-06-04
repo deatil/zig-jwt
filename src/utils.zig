@@ -5,12 +5,16 @@ const Allocator = std.mem.Allocator;
 pub const json = std.json;
 pub const base64 = std.base64;
 
+pub const JsonParsedValue = json.Parsed(json.Value);
+
 pub fn base64Decode(alloc: Allocator, input: []const u8) ![]const u8 {
     const decoder = base64.standard.Decoder;
     const decode_len = try decoder.calcSizeForSlice(input);
 
     const buffer = try alloc.alloc(u8, decode_len);
     _ = decoder.decode(buffer, input) catch {
+        defer alloc.free(buffer);
+
         return "";
     };
 
@@ -33,6 +37,8 @@ pub fn base64UrlDecode(alloc: Allocator, input: []const u8) ![]const u8 {
 
     const buffer = try alloc.alloc(u8, decode_len);
     _ = decoder.decode(buffer, input) catch {
+        defer alloc.free(buffer);
+
         return "";
     };
 
@@ -48,14 +54,12 @@ pub fn jsonEncode(alloc: Allocator, value: anytype) ![]const u8 {
     return out.toOwnedSlice();
 }
 
-pub fn jsonDecode(alloc: Allocator, value: []const u8) !json.Value {
-    const parsed = try json.parseFromSlice(json.Value, alloc, value, .{});
-    return parsed.value;
+pub fn jsonDecode(alloc: Allocator, value: []const u8) !json.Parsed(json.Value) {
+    return json.parseFromSlice(json.Value, alloc, value, .{});
 }
 
-pub fn jsonDecodeT(comptime T: type, alloc: Allocator, value: []const u8) !T {
-    const parsed = try json.parseFromSlice(T, alloc, value, .{});
-    return parsed.value;
+pub fn jsonDecodeT(comptime T: type, alloc: Allocator, value: []const u8) !json.Parsed(T) {
+    return json.parseFromSlice(T, alloc, value, .{});
 }
 
 pub fn eq(rest: []const u8, needle: []const u8) bool {
@@ -100,28 +104,29 @@ test "constTimeEqual" {
     try testing.expectEqual(false, constTimeEqual("asdf", "0asdf"));
     try testing.expectEqual(false, constTimeEqual("asdf", "bsdf"));
     try testing.expectEqual(true, constTimeEqual("bsdf", "bsdf"));
-
 }
 
 test "base64UrlEncode" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const msg = "test-data";
     const check = "dGVzdC1kYXRh";
 
     const res = try base64UrlEncode(alloc, msg);
+    defer alloc.free(res);
     try testing.expectEqualStrings(check, res);
 
     const res2 = try base64UrlDecode(alloc, check);
+    defer alloc.free(res2);
     try testing.expectEqualStrings(msg, res2);
 
     const res3 = try base64Decode(alloc, check);
+    defer alloc.free(res3);
     try testing.expectEqualStrings(msg, res3);
-
 }
 
 test "jsonEncode" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
 
     const msg = .{
         .typ = "test-data",
@@ -129,15 +134,18 @@ test "jsonEncode" {
     const check = "{\"typ\":\"test-data\"}";
 
     const res = try jsonEncode(alloc, msg);
+    defer alloc.free(res);
     try testing.expectEqualStrings(check, res);
 
     const res2 = try jsonDecode(alloc, check);
-    try testing.expectEqualStrings(msg.typ, res2.object.get("typ").?.string);
+    defer res2.deinit();
+    try testing.expectEqualStrings(msg.typ, res2.value.object.get("typ").?.string);
 
     const msg3 = struct {
         typ: []const u8,
     };
 
     const res3 = try jsonDecodeT(msg3, alloc, check);
-    try testing.expectEqualStrings(msg.typ, res3.typ);
+    defer res3.deinit();
+    try testing.expectEqualStrings(msg.typ, res3.value.typ);
 }

@@ -8,7 +8,7 @@ pub const SigningBLAKE2B = SignBlake2b(blake2.Blake2b256, "BLAKE2B");
 
 pub fn SignBlake2b(comptime Hash: type, comptime name: []const u8) type {
     return struct {
-        alloc: Allocator, 
+        alloc: Allocator,
 
         const Self = @This();
 
@@ -55,7 +55,7 @@ pub fn SignBlake2b(comptime Hash: type, comptime name: []const u8) type {
             if (signature.len != sign_length) {
                 return false;
             }
-                        
+
             var out: [digest_length]u8 = undefined;
 
             var h = Hash.init(.{
@@ -74,7 +74,8 @@ pub fn SignBlake2b(comptime Hash: type, comptime name: []const u8) type {
 }
 
 test "SigningBLAKE2B" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
+
     const h = SigningBLAKE2B.init(alloc);
 
     const alg = h.alg();
@@ -88,6 +89,8 @@ test "SigningBLAKE2B" {
 
     const signed = try h.sign(msg, key);
 
+    defer alloc.free(signed);
+
     var signature2: [32]u8 = undefined;
     @memcpy(signature2[0..], signed);
     const singed_res = fmt.bytesToHex(signature2, .lower);
@@ -97,11 +100,11 @@ test "SigningBLAKE2B" {
     const veri = h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
-
 }
 
 test "SigningBLAKE2B key short" {
-    const alloc = std.heap.page_allocator;
+    const alloc = testing.allocator;
+
     const h = SigningBLAKE2B.init(alloc);
 
     const alg = h.alg();
@@ -118,5 +121,4 @@ test "SigningBLAKE2B key short" {
         try testing.expectEqual(error.JWTBlake2bKeyTooShort, err);
     };
     try testing.expectEqual(true, need_true);
-
 }
