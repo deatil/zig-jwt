@@ -55,7 +55,7 @@ exe.root_module.addImport("zig-jwt", zig_jwt_dep.module("zig-jwt"));
 The `zig-jwt` structure can be imported in your application with:
 
 ```zig
-const zig_jwt = @import("zig-jwt");
+const jwt = @import("zig-jwt");
 ```
 
 
@@ -77,6 +77,7 @@ pub fn main() !void {
 
     const s = jwt.SigningMethodEdDSA.init(alloc);
     const token_string = try s.sign(claims, kp.secret_key);
+
     defer alloc.free(token_string);
     
     // output: 
@@ -85,6 +86,7 @@ pub fn main() !void {
 
     const p = jwt.SigningMethodEdDSA.init(alloc);
     var token = try p.parse(token_string, kp.public_key);
+
     defer p.deinit();
     
     // output: 
@@ -118,6 +120,8 @@ pub fn main() !void {
     // output: 
     // hasBeenIssuedBy: true
     std.debug.print("hasBeenIssuedBy: {} \n", .{validator.hasBeenIssuedBy("iss")});
+
+    // const now = std.time.timestamp();
 
     // have functions:
     // validator.hasBeenIssuedBy("iss") // iss

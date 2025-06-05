@@ -92,7 +92,7 @@ pub fn CheckOid(comptime namedcurve_oid: []const u8) type {
 }
 
 // parse key der
-pub fn ParseKeyDer(comptime EC: type, comptime checkOid: type) type {
+pub fn ParseKeyDer(comptime EC: type, comptime CheckOidFn: type) type {
     return struct {
         const Self = @This();
 
@@ -107,7 +107,7 @@ pub fn ParseKeyDer(comptime EC: type, comptime checkOid: type) type {
 
             const namedcurve_oid = try parser.expectOid();
 
-            try checkOid.check(namedcurve_oid);
+            try CheckOidFn.check(namedcurve_oid);
 
             parser.seek(oid_seq.slice.end);
             const pubkey = try parser.expectBitstring();
@@ -175,7 +175,7 @@ pub fn ParseKeyDer(comptime EC: type, comptime checkOid: type) type {
                 namedcurve_oid = parser.expectOid() catch "";
             }
 
-            try checkOid.check(namedcurve_oid);
+            try CheckOidFn.check(namedcurve_oid);
 
             var prikey: [EC.SecretKey.encoded_length]u8 = undefined;
             @memcpy(prikey[0..], parse_prikey_bytes);
