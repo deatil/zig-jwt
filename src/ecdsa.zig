@@ -73,14 +73,26 @@ const oid_ecdsa_p384_namedcurve = "1.3.132.0.34";
 const oid_ecdsa_p521_namedcurve = "1.3.132.0.35";
 const oid_ecdsa_s256_namedcurve = "1.3.132.0.10";
 
-pub const ParseP256Sha256Der = ParseKeyDer(ecdsa.EcdsaP256Sha256);
-pub const ParseP384Sha384Der = ParseKeyDer(ecdsa.EcdsaP384Sha384);
-// pub const ParseP521Sha512Der = ParseKeyDer(ecdsa.EcdsaP521Sha512);
+pub const ParseP256Sha256Der = ParseKeyDer(ecdsa.EcdsaP256Sha256, CheckOid(oid_ecdsa_p256_namedcurve));
+pub const ParseP384Sha384Der = ParseKeyDer(ecdsa.EcdsaP384Sha384, CheckOid(oid_ecdsa_p384_namedcurve));
+// pub const ParseP521Sha512Der = ParseKeyDer(ecdsa.EcdsaP521Sha512, CheckOid(oid_ecdsa_p521_namedcurve));
 
-pub const ParseSecp256k1Sha256Der = ParseKeyDer(ecdsa.EcdsaSecp256k1Sha256);
+pub const ParseSecp256k1Sha256Der = ParseKeyDer(ecdsa.EcdsaSecp256k1Sha256, CheckOid(oid_ecdsa_s256_namedcurve));
+
+/// check namedcurve OID
+pub fn CheckOid(comptime namedcurve_oid: []const u8) type {
+    return struct {
+        const Self = @This();
+
+        /// check oid
+        pub fn check(oid: []const u8) !void {
+            try checkECDSAPublickeyNamedCurveOid(oid, namedcurve_oid);
+        }
+    };
+}
 
 // parse key der
-pub fn ParseKeyDer(comptime EC: type) type {
+pub fn ParseKeyDer(comptime EC: type, comptime checkOid: type) type {
     return struct {
         const Self = @This();
 
@@ -95,20 +107,7 @@ pub fn ParseKeyDer(comptime EC: type) type {
 
             const namedcurve_oid = try parser.expectOid();
 
-            switch (EC.PublicKey) {
-                ecdsa.EcdsaP256Sha256.PublicKey => {
-                    try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_p256_namedcurve);
-                },
-                ecdsa.EcdsaP384Sha384.PublicKey => {
-                    try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_p384_namedcurve);
-                },
-                ecdsa.EcdsaSecp256k1Sha256.PublicKey => {
-                    try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_s256_namedcurve);
-                },
-                else => {
-                    return error.JWTEcdsaNamedCurveNotSupport;
-                },
-            }
+            try checkOid.check(namedcurve_oid);
 
             parser.seek(oid_seq.slice.end);
             const pubkey = try parser.expectBitstring();
@@ -176,20 +175,7 @@ pub fn ParseKeyDer(comptime EC: type) type {
                 namedcurve_oid = parser.expectOid() catch "";
             }
 
-            switch (EC.SecretKey) {
-                ecdsa.EcdsaP256Sha256.SecretKey => {
-                    try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_p256_namedcurve);
-                },
-                ecdsa.EcdsaP384Sha384.SecretKey => {
-                    try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_p384_namedcurve);
-                },
-                ecdsa.EcdsaSecp256k1Sha256.SecretKey => {
-                    try checkECDSAPublickeyNamedCurveOid(namedcurve_oid, oid_ecdsa_s256_namedcurve);
-                },
-                else => {
-                    return error.JWTEcdsaNamedCurveNotSupport;
-                },
-            }
+            try checkOid.check(namedcurve_oid);
 
             var prikey: [EC.SecretKey.encoded_length]u8 = undefined;
             @memcpy(prikey[0..], parse_prikey_bytes);
@@ -219,7 +205,7 @@ fn checkECDSAPublickeyNamedCurveOid(oid: []const u8, namedcurve_oid: []const u8)
 
     const oid_string = stream.getWritten();
     if (!std.mem.eql(u8, oid_string, namedcurve_oid)) {
-        return error.JWTEcdsaNamedcurveOidNotSupport;
+        return error.JWTEcdsaNamedCurveNotSupport;
     }
 
     return;
