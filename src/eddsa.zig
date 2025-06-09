@@ -111,12 +111,11 @@ pub fn parsePublicKeyDer(bytes: []const u8) !Ed25519.PublicKey {
     parser.seek(oid_seq.slice.end);
     const pubkey = try parser.expectBitstring();
 
-    try parser.expectEnd(seq.slice.end);
-    try parser.expectEnd(bytes.len);
-
     if (pubkey.bytes.len != Ed25519.PublicKey.encoded_length) {
         return error.JWTEdDSAPublicKeyBytesLengthError;
     }
+
+    _ = seq;
 
     var pubkey_bytes: [Ed25519.PublicKey.encoded_length]u8 = undefined;
     @memcpy(pubkey_bytes[0..], pubkey.bytes);

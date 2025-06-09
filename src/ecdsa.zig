@@ -112,8 +112,7 @@ pub fn ParseKeyDer(comptime EC: type, comptime CheckOidFn: type) type {
             parser.seek(oid_seq.slice.end);
             const pubkey = try parser.expectBitstring();
 
-            try parser.expectEnd(seq.slice.end);
-            try parser.expectEnd(bytes.len);
+            _ = seq;
 
             return EC.PublicKey.fromSec1(pubkey.bytes);
         }

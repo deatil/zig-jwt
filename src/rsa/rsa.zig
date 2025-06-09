@@ -53,8 +53,8 @@ pub const PublicKey = struct {
         const modulus = try parser.expectPrimitive(.integer);
         const pub_exp = try parser.expectPrimitive(.integer);
 
-        try parser.expectEnd(seq.slice.end);
-        try parser.expectEnd(bytes.len);
+        // try parser.expectEnd(seq.slice.end);
+        // try parser.expectEnd(bytes.len);
 
         return Self.fromBytes(parser.view(modulus), parser.view(pub_exp));
     }
@@ -71,8 +71,7 @@ pub const PublicKey = struct {
         parser.seek(oid_seq.slice.end);
         const pubkey = try parser.expectBitstring();
 
-        try parser.expectEnd(seq.slice.end);
-        try parser.expectEnd(bytes.len);
+        _ = seq;
 
         return Self.fromDer(pubkey.bytes);
     }
@@ -222,8 +221,7 @@ pub const SecretKey = struct {
             else => return error.InvalidVersion,
         }
 
-        try parser.expectEnd(seq.slice.end);
-        try parser.expectEnd(bytes.len);
+        _ = seq;
 
         const p = try Fe.fromBytes(public.n, parser.view(prime1), .big);
         const q = try Fe.fromBytes(public.n, parser.view(prime2), .big);
