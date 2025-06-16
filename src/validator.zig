@@ -153,7 +153,7 @@ test "Validator isExpired" {
     const now = time.timestamp();
 
     var token = Token.init(alloc);
-    try token.parse(check1);
+    token.parse(check1);
 
     var validator = try Validator.init(token);
     defer validator.deinit();
@@ -175,7 +175,7 @@ test "Validator isMinimumTimeBefore" {
     const now = time.timestamp();
 
     var token = Token.init(alloc);
-    try token.parse(check1);
+    token.parse(check1);
 
     var validator = try Validator.init(token);
     defer validator.deinit();
@@ -195,7 +195,7 @@ test "Validator" {
     const now = time.timestamp();
 
     var token = Token.init(alloc);
-    try token.parse(check1);
+    token.parse(check1);
 
     var validator = try Validator.init(token);
     defer validator.deinit();
@@ -222,7 +222,7 @@ test "Validator" {
     // ======
 
     var token2 = Token.init(alloc);
-    try token2.parse(check1);
+    token2.parse(check1);
 
     var validator2 = try Validator.init(token2);
     defer validator2.deinit();

@@ -82,7 +82,7 @@ test "Token Validator" {
     const now = time.timestamp();
 
     var token = jwt.Token.init(alloc);
-    try token.parse(check1);
+    token.parse(check1);
 
     var validator = try jwt.Validator.init(token);
     defer validator.deinit();

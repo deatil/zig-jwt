@@ -95,7 +95,7 @@ pub const Token = struct {
         return buf.toOwnedSlice();
     }
 
-    pub fn parse(self: *Self, token_string: []const u8) !void {
+    pub fn parse(self: *Self, token_string: []const u8) void {
         if (token_string.len == 0) {
             return;
         }
@@ -243,7 +243,7 @@ test "Token" {
     // }
 
     var token2 = Token.init(alloc);
-    try token2.parse(check1);
+    token2.parse(check1);
 
     defer token2.deinit();
 
@@ -264,7 +264,7 @@ test "Token" {
     // ====================
 
     var token3 = Token.init(alloc);
-    try token3.parse(check2);
+    token3.parse(check2);
 
     defer token3.deinit();
 
@@ -295,7 +295,7 @@ test "Token" {
     const check3 = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9";
 
     var token6 = Token.init(alloc);
-    try token6.parse(check3);
+    token6.parse(check3);
 
     defer token6.deinit();
 
@@ -378,7 +378,7 @@ test "Token 3" {
     // ================
 
     var token2 = Token.init(alloc);
-    try token2.parse(check1);
+    token2.parse(check1);
 
     defer token2.deinit();
 

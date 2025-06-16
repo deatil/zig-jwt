@@ -103,7 +103,7 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
         // parse token and token signature verify
         pub fn parse(self: Self, token_string: []const u8, verify_key: VerifyKeyType) !Token {
             var t = Token.init(self.alloc);
-            try t.parse(token_string);
+            t.parse(token_string);
 
             var header = try t.getHeader();
             defer header.deinit(self.alloc);
@@ -235,7 +235,7 @@ pub fn getSigningMethod(name: []const u8) !type {
 
 pub fn getTokenHeader(alloc: Allocator, token_string: []const u8) !Token.Header {
     var t = Token.init(alloc);
-    try t.parse(token_string);
+    t.parse(token_string);
 
     defer t.deinit();
 
