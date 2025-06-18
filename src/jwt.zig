@@ -45,7 +45,12 @@ pub const SigningMethodBLAKE2B = JWT(blake2b.SigningBLAKE2B, []const u8, []const
 
 pub const SigningMethodNone = JWT(none.SigningNone, []const u8, []const u8);
 
-pub const Error = error{ JWTVerifyFail, JWTSigningMethodNotExists, JWTTypeInvalid, JWTAlgoInvalid };
+pub const Error = error{
+    JWTVerifyFail,
+    JWTSigningMethodNotExists,
+    JWTTypeInvalid,
+    JWTAlgoInvalid,
+};
 
 pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKeyType: type) type {
     const BuilderType = builder.Builder(Signer, SignKeyType);
