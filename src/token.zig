@@ -175,11 +175,11 @@ pub const Token = struct {
         };
     }
 
-    pub fn getHeaderValue(self: *Self) !json.Parsed(json.Value) {
+    pub fn getHeaders(self: *Self) !json.Parsed(json.Value) {
         return utils.jsonDecode(self.alloc, self.header);
     }
 
-    pub fn getHeaderT(self: *Self, comptime T: type) !json.Parsed(T) {
+    pub fn getHeadersT(self: *Self, comptime T: type) !json.Parsed(T) {
         return utils.jsonDecodeT(T, self.alloc, self.header);
     }
 
@@ -402,13 +402,13 @@ test "Token 3" {
         alg: []const u8,
         kid: []const u8,
     };
-    const header3 = try token2.getHeaderT(headerT);
+    const header3 = try token2.getHeadersT(headerT);
     defer header3.deinit();
     try testing.expectEqualStrings(header.typ, header3.value.typ);
     try testing.expectEqualStrings(header.alg, header3.value.alg);
     try testing.expectEqualStrings(header.kid.?, header3.value.kid);
 
-    const header33 = try token2.getHeaderValue();
+    const header33 = try token2.getHeaders();
     defer header33.deinit();
     try testing.expectEqualStrings(header.typ, header33.value.object.get("typ").?.string);
     try testing.expectEqualStrings(header.alg, header33.value.object.get("alg").?.string);

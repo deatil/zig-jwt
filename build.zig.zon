@@ -1,7 +1,7 @@
 .{
     .name = .zig_jwt,
     .description = "A JWT (JSON Web Token) library for zig.",
-    .version = "1.2.6",
+    .version = "1.2.7",
     .fingerprint = 0x30a5aec248bd7ac3, 
     .minimum_zig_version = "0.15.0-dev.337+4e700fdf8",
     .dependencies = .{},

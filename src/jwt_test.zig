@@ -167,7 +167,7 @@ test "SigningMethodEdDSA signWithHeader" {
     var parsed = try p.parse(token_string, kp.public_key);
     defer parsed.deinit();
 
-    const header2 = try parsed.getHeaderValue();
+    const header2 = try parsed.getHeaders();
     defer header2.deinit();
     try testing.expectEqualStrings(header.typ, header2.value.object.get("typ").?.string);
     try testing.expectEqualStrings(header.alg, header2.value.object.get("alg").?.string);
