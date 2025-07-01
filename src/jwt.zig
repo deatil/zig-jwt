@@ -133,7 +133,7 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
 
             defer self.alloc.free(token_sign);
 
-            const signing_string = try t.signingString();
+            const signing_string = try t.getMsg();
             defer self.alloc.free(signing_string);
 
             if (!self.signer.verify(signing_string, token_sign, verify_key)) {
