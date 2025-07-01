@@ -8,6 +8,7 @@ const utils = @import("utils.zig");
 
 pub const Token = struct {
     raw: []const u8 = "",
+    msg: []const u8 = "",
     header: []const u8 = "",
     claims: []const u8 = "",
     signature: []const u8 = "",
@@ -37,6 +38,8 @@ pub const Token = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        self.alloc.free(self.raw);
+        self.alloc.free(self.msg);
         self.alloc.free(self.header);
         self.alloc.free(self.claims);
         self.alloc.free(self.signature);
@@ -100,7 +103,7 @@ pub const Token = struct {
             return;
         }
 
-        self.raw = token_string;
+        self.raw = self.alloc.dupe(u8, token_string) catch "";
         self.header = "";
         self.claims = "";
         self.signature = "";
@@ -115,13 +118,19 @@ pub const Token = struct {
         if (it.next()) |pair| {
             self.signature = utils.base64UrlDecode(self.alloc, pair) catch "";
         }
+
+        self.msg = self.getRawNoSignature() catch "";
     }
 
     pub fn getRaw(self: *Self) ![]const u8 {
         return self.alloc.dupe(u8, self.raw);
     }
 
-    pub fn getRawNoSignature(self: *Self) ![]const u8 {
+    pub fn getMsg(self: *Self) ![]const u8 {
+        return self.alloc.dupe(u8, self.msg);
+    }
+
+    fn getRawNoSignature(self: *Self) ![]const u8 {
         const count = std.mem.count(u8, self.raw, ".");
         if (count <= 1) {
             return self.alloc.dupe(u8, self.raw);
@@ -286,7 +295,7 @@ test "Token" {
     defer alloc.free(token51);
     try testing.expectEqualStrings(check2, token51);
 
-    const token5 = try token3.getRawNoSignature();
+    const token5 = try token3.getMsg();
     defer alloc.free(token5);
     try testing.expectEqualStrings(check1, token5);
 
@@ -303,7 +312,7 @@ test "Token" {
     defer alloc.free(sig61);
     try testing.expectEqualStrings(check3, sig61);
 
-    const sig6 = try token6.getRawNoSignature();
+    const sig6 = try token6.getMsg();
     defer alloc.free(sig6);
     try testing.expectEqualStrings(check3, sig6);
 }
