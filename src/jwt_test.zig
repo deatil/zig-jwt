@@ -1444,6 +1444,23 @@ test "SigningMethodEdDSA type" {
     try testing.expectEqualStrings(headers.alg, headers2.alg);
 }
 
+test "SigningMethodEdDSA JWTTokenInvalid" {
+    const alloc = testing.allocator;
+
+    const kp = jwt.eddsa.Ed25519.KeyPair.generate();
+
+    const token_string = "eyJhbGciOiJFRDI1NTE5IiwidHlwIjoiSldUIn0";
+
+    const p = jwt.SigningMethodEdDSA.init(alloc);
+
+    var need_true: bool = false;
+    _ = p.parse(token_string, kp.public_key) catch |err| {
+        need_true = true;
+        try testing.expectEqual(jwt.Error.JWTTokenInvalid, err);
+    };
+    try testing.expectEqual(true, need_true);
+}
+
 test "SigningMethodEdDSA JWTTypeInvalid" {
     const alloc = testing.allocator;
 

@@ -24,6 +24,10 @@ pub const PublicKey = struct {
 
     const Self = @This();
 
+    pub fn size(self: Self) usize {
+        return byteLen(self.n.bits());
+    }
+
     pub fn fromBytes(mod: []const u8, exp: []const u8) !PublicKey {
         const n = try Modulus.fromBytes(mod, .big);
         if (n.bits() <= 512) return error.InsecureBitCount;
@@ -1138,6 +1142,8 @@ test "rsa PKCS1-v1_5 encrypt and decrypt" {
 
     try std.testing.expectEqualSlices(u8, msg, dec);
 
+    try std.testing.expectEqual(256, kp.public_key.size());
+
     // ==========
 
     const check2 = "907052e0ee7f8f92990751c3432c73a3450a7dece61ba1876169875dc9b28b4aa40699c8377141ed021a92c1ab623d734e8cf1010814eb7fc26321c7b037cc467c0f2b9029c4fc082387c7dedb718dda3251b3b2a7f06871d446be2df051e2013d3726af7002a5e487559cf36ea6a11bacdfb12dc35cc9285bfed8906fac3c0c8a1a69bbdc8f834e5f1a766e13792dcc202bf48e7eb6aca78f8df4904b59d2d09b5eaaf58903217b1d0d21fb66e5e44836b422500a2c9d5e0f37232544dc32a0d1ec33e32c4b113057441097f936a6e7b4f49be6b7fb7240b0f982aee9b3fde4708fb7dfe365b9576bcd0fd0120a50658c76c2e0361b82fbf60a423b363dd354";
@@ -1306,6 +1312,9 @@ fn test_sign_with_key_der(prikey: []const u8, pubkey: []const u8) !void {
 
     const pri_key = try SecretKey.fromDerAuto(prikey_bytes);
     const pub_key = try PublicKey.fromDerAuto(pubkey_bytes);
+
+    try std.testing.expectEqual(256, pri_key.public_key.size());
+    try std.testing.expectEqual(256, pub_key.size());
 
     const msg = "rsa PSS signature";
     var out: [max_modulus_len]u8 = undefined;

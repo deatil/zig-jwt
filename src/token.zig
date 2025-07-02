@@ -130,6 +130,11 @@ pub const Token = struct {
         return self.alloc.dupe(u8, self.msg);
     }
 
+    pub fn getPartCount(self: *Self) usize {
+        const count = std.mem.count(u8, self.raw, ".");
+        return count + 1;
+    }
+
     fn getRawNoSignature(self: *Self) ![]const u8 {
         const count = std.mem.count(u8, self.raw, ".");
         if (count <= 1) {
@@ -270,6 +275,9 @@ test "Token" {
     defer alloc.free(signature2);
     try testing.expectEqual(0, signature2.len);
 
+    const partCount = token2.getPartCount();
+    try testing.expectEqual(2, partCount);
+
     // ====================
 
     var token3 = Token.init(alloc);
@@ -299,6 +307,9 @@ test "Token" {
     defer alloc.free(token5);
     try testing.expectEqualStrings(check1, token5);
 
+    const partCount2 = token3.getPartCount();
+    try testing.expectEqual(3, partCount2);
+
     // ====================
 
     const check3 = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9";
@@ -315,6 +326,9 @@ test "Token" {
     const sig6 = try token6.getMsg();
     defer alloc.free(sig6);
     try testing.expectEqualStrings(check3, sig6);
+
+    const partCount6 = token6.getPartCount();
+    try testing.expectEqual(1, partCount6);
 }
 
 test "Token 2" {

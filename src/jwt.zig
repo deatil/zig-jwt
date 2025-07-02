@@ -48,6 +48,7 @@ pub const SigningMethodNone = JWT(none.SigningNone, []const u8, []const u8);
 pub const Error = error{
     JWTVerifyFail,
     JWTSigningMethodNotExists,
+    JWTTokenInvalid,
     JWTTypeInvalid,
     JWTAlgoInvalid,
 };
@@ -110,6 +111,12 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
             var t = Token.init(self.alloc);
             t.parse(token_string);
 
+            if (t.getPartCount() < 2) {
+                defer t.deinit();
+
+                return Error.JWTTokenInvalid;
+            }
+
             var header = try t.getHeader();
             defer header.deinit(self.alloc);
 
@@ -145,6 +152,7 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
             return t;
         }
 
+        // build token
         pub fn build(self: Self) BuilderType {
             return BuilderType.init(self.alloc);
         }
