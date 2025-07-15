@@ -99,14 +99,14 @@ pub const Token = struct {
     }
 
     pub fn parse(self: *Self, token_string: []const u8) void {
-        if (token_string.len == 0) {
-            return;
-        }
-
         self.raw = self.alloc.dupe(u8, token_string) catch "";
         self.header = "";
         self.claims = "";
         self.signature = "";
+
+        if (token_string.len == 0) {
+            return;
+        }
 
         var it = std.mem.splitScalar(u8, token_string, '.');
         if (it.next()) |pair| {
