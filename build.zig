@@ -1,8 +1,8 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    _ = b.addModule("zig-jwt", .{
-        .root_source_file = b.path("./src/jwt.zig"),
+    const mod = b.addModule("zig-jwt", .{
+        .root_source_file = b.path("src/jwt.zig"),
     });
 
     // -Dtest-filter="..."
@@ -10,7 +10,7 @@ pub fn build(b: *std.Build) void {
 
     // zig build unit_test
     const unit_tests = b.addTest(.{
-        .root_source_file = b.path("./src/jwt.zig"),
+        .root_module = mod,
     });
     if (test_filter) |t| unit_tests.filters = t;
 
