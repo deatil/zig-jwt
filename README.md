@@ -110,7 +110,7 @@ pub fn main() !void {
     const token_string = "eyJ0eXAiOiJKV0UiLCJhbGciOiJFUzI1NiIsImtpZCI6ImtpZHMifQ.eyJpc3MiOiJpc3MiLCJpYXQiOjE1Njc4NDIzODgsImV4cCI6MTc2Nzg0MjM4OCwiYXVkIjoiZXhhbXBsZS5jb20iLCJzdWIiOiJzdWIiLCJqdGkiOiJqdGkgcnJyIiwibmJmIjoxNTY3ODQyMzg4fQ.dGVzdC1zaWduYXR1cmU";
 
     var token = jwt.Token.init(alloc);
-    try token.parse(token_string);
+    token.parse(token_string);
 
     var validator = try jwt.Validator.init(token);
     defer validator.deinit();
