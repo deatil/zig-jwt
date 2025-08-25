@@ -74,28 +74,28 @@ pub const Token = struct {
     }
 
     fn signing(self: *Self, need_sign: bool) ![]const u8 {
-        var buf = std.ArrayList(u8).init(self.alloc);
-        defer buf.deinit();
+        var buf = try std.ArrayList(u8).initCapacity(self.alloc, 0);
+        defer buf.deinit(self.alloc);
 
         const header = try utils.base64UrlEncode(self.alloc, self.header);
-        try buf.appendSlice(header[0..]);
+        try buf.appendSlice(self.alloc, header[0..]);
 
         const claims = try utils.base64UrlEncode(self.alloc, self.claims);
-        try buf.append('.');
-        try buf.appendSlice(claims[0..]);
+        try buf.append(self.alloc, '.');
+        try buf.appendSlice(self.alloc, claims[0..]);
 
         defer self.alloc.free(header);
         defer self.alloc.free(claims);
 
         if (need_sign) {
             const signature = try utils.base64UrlEncode(self.alloc, self.signature);
-            try buf.append('.');
-            try buf.appendSlice(signature[0..]);
+            try buf.append(self.alloc, '.');
+            try buf.appendSlice(self.alloc, signature[0..]);
 
             defer self.alloc.free(signature);
         }
 
-        return buf.toOwnedSlice();
+        return buf.toOwnedSlice(self.alloc);
     }
 
     pub fn parse(self: *Self, token_string: []const u8) void {

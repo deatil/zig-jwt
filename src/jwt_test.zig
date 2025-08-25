@@ -112,7 +112,6 @@ test "SigningMethodEdDSA builder" {
     defer build.deinit();
 
     var c = build.claimsData();
-    defer c.deinit();
 
     try c.begin();
     try c.permittedFor(claims.aud);

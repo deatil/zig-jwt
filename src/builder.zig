@@ -4,7 +4,8 @@ const json = std.json;
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 
-const Values = std.ArrayList(u8);
+const Writer = std.io.Writer;
+const Allocating = std.io.Writer.Allocating;
 
 const eddsa = @import("eddsa.zig");
 const Token = @import("token.zig").Token;
@@ -30,8 +31,8 @@ pub const RegisteredClaims = struct {
 pub fn Builder(comptime Signer: type, comptime SecretKeyType: type) type {
     return struct {
         signer: Signer,
-        headers: Values,
-        claims: Values,
+        headers: Allocating,
+        claims: Allocating,
         alloc: Allocator,
 
         const Self = @This();
@@ -39,8 +40,8 @@ pub fn Builder(comptime Signer: type, comptime SecretKeyType: type) type {
         pub fn init(alloc: Allocator) Self {
             return .{
                 .signer = Signer.init(alloc),
-                .headers = Values.init(alloc),
-                .claims = Values.init(alloc),
+                .headers = Allocating.init(alloc),
+                .claims = Allocating.init(alloc),
                 .alloc = alloc,
             };
         }
@@ -51,22 +52,20 @@ pub fn Builder(comptime Signer: type, comptime SecretKeyType: type) type {
         }
 
         pub fn headersData(self: *Self) HeadersData {
-            return HeadersData.init(&self.headers);
+            return HeadersData.init(&self.headers.writer);
         }
 
         pub fn claimsData(self: *Self) ClaimsData {
-            return ClaimsData.init(&self.claims);
+            return ClaimsData.init(&self.claims.writer);
         }
 
         pub fn getHeaders(self: *Self) ![]const u8 {
-            var clone = try self.headers.clone();
-            const headers = try clone.toOwnedSlice();
+            const headers = self.headers.written();
             return headers;
         }
 
         pub fn getClaims(self: *Self) ![]const u8 {
-            var clone = try self.claims.clone();
-            const claims = try clone.toOwnedSlice();
+            const claims = self.claims.written();
             return claims;
         }
 
@@ -74,7 +73,6 @@ pub fn Builder(comptime Signer: type, comptime SecretKeyType: type) type {
             var header = try self.getHeaders();
             if (header.len == 0) {
                 var h = self.headersData();
-                defer h.deinit();
 
                 try h.begin();
                 try h.typeBy("JWT");
@@ -84,10 +82,7 @@ pub fn Builder(comptime Signer: type, comptime SecretKeyType: type) type {
                 header = try self.getHeaders();
             }
 
-            defer self.alloc.free(header);
-
             const claims = try self.getClaims();
-            defer self.alloc.free(claims);
 
             var t = Token.init(self.alloc);
             try t.withHeader(header);
@@ -107,18 +102,17 @@ pub fn Builder(comptime Signer: type, comptime SecretKeyType: type) type {
 }
 
 pub const HeadersData = struct {
-    stream: json.WriteStream(Values.Writer, .{ .checked_to_fixed_depth = 256 }),
+    stream: json.Stringify,
 
     const Self = @This();
 
-    pub fn init(value: *Values) Self {
+    pub fn init(value: *Writer) Self {
         return .{
-            .stream = json.writeStream(value.*.writer(), .{ .emit_null_optional_fields = false }),
+            .stream = .{
+                .writer = value,
+                .options = .{ .emit_null_optional_fields = false },
+            },
         };
-    }
-
-    pub fn deinit(self: *Self) void {
-        self.stream.deinit();
     }
 
     pub fn begin(self: *Self) !void {
@@ -144,18 +138,17 @@ pub const HeadersData = struct {
 };
 
 pub const ClaimsData = struct {
-    stream: json.WriteStream(Values.Writer, .{ .checked_to_fixed_depth = 256 }),
+    stream: json.Stringify,
 
     const Self = @This();
 
-    pub fn init(value: *Values) Self {
+    pub fn init(value: *Writer) Self {
         return .{
-            .stream = json.writeStream(value.*.writer(), .{ .emit_null_optional_fields = false }),
+            .stream = .{
+                .writer = value,
+                .options = .{ .emit_null_optional_fields = false },
+            },
         };
-    }
-
-    pub fn deinit(self: *Self) void {
-        self.stream.deinit();
     }
 
     pub fn begin(self: *Self) !void {
@@ -203,10 +196,9 @@ pub const ClaimsData = struct {
 test "ClaimsData" {
     const alloc = testing.allocator;
 
-    var value = Values.init(alloc);
+    var value: std.io.Writer.Allocating = .init(alloc);
 
-    var b = ClaimsData.init(&value);
-    defer b.deinit();
+    var b = ClaimsData.init(&value.writer);
 
     try b.begin();
     try b.permittedFor("permitted_for");
@@ -233,10 +225,9 @@ test "ClaimsData" {
 test "HeadersData" {
     const alloc = testing.allocator;
 
-    var value = Values.init(alloc);
+    var value: std.io.Writer.Allocating = .init(alloc);
 
-    var b = HeadersData.init(&value);
-    defer b.deinit();
+    var b = HeadersData.init(&value.writer);
 
     try b.begin();
     try b.setData("typ", "JWT");
@@ -257,10 +248,9 @@ test "HeadersData" {
 test "HeadersData 2" {
     const alloc = testing.allocator;
 
-    var value = Values.init(alloc);
+    var value: std.io.Writer.Allocating = .init(alloc);
 
-    var b = HeadersData.init(&value);
-    defer b.deinit();
+    var b = HeadersData.init(&value.writer);
 
     try b.begin();
     try b.typeBy("JWT");
@@ -285,7 +275,6 @@ test "Builder" {
     defer build.deinit();
 
     var b = build.claimsData();
-    defer b.deinit();
 
     try b.begin();
     try b.permittedFor("permitted_for");
@@ -303,15 +292,11 @@ test "Builder" {
     ;
 
     const claims = try build.getClaims();
-
-    defer alloc.free(claims);
-
     try testing.expectEqualStrings(check, claims);
 
     // =======
 
     var h = build.headersData();
-    defer h.deinit();
 
     try h.begin();
     try h.setData("typ", "JWT");
@@ -323,7 +308,6 @@ test "Builder" {
     ;
 
     const claims2 = try build.getHeaders();
-    defer alloc.free(claims2);
     try testing.expectEqualStrings(check2, claims2);
 
     // =======
@@ -351,7 +335,6 @@ test "Builder 2" {
     defer build.deinit();
 
     var b = build.claimsData();
-    defer b.deinit();
 
     try b.begin();
     try b.permittedFor("permitted_for");
@@ -365,7 +348,6 @@ test "Builder 2" {
     try b.end();
 
     var h = build.headersData();
-    defer h.deinit();
 
     try h.begin();
     try h.setData("typ", "JWT");
@@ -390,7 +372,6 @@ test "Builder 3" {
     defer build.deinit();
 
     var b = build.claimsData();
-    defer b.deinit();
 
     try b.begin();
     try b.permittedFor("permitted_for");
@@ -408,9 +389,6 @@ test "Builder 3" {
     ;
 
     const claims = try build.getClaims();
-
-    defer alloc.free(claims);
-
     try testing.expectEqualStrings(check, claims);
 
     // =======

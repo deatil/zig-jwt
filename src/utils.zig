@@ -2,6 +2,7 @@ const std = @import("std");
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 
+pub const fmt = std.fmt;
 pub const json = std.json;
 pub const base64 = std.base64;
 
@@ -46,12 +47,9 @@ pub fn base64UrlDecode(alloc: Allocator, input: []const u8) ![]const u8 {
 }
 
 pub fn jsonEncode(alloc: Allocator, value: anytype) ![]const u8 {
-    var out = std.ArrayList(u8).init(alloc);
-    defer out.deinit();
+    const out = try json.Stringify.valueAlloc(alloc, value, .{ .emit_null_optional_fields = false });
 
-    try json.stringify(value, .{ .emit_null_optional_fields = false }, out.writer());
-
-    return out.toOwnedSlice();
+    return out;
 }
 
 pub fn jsonDecode(alloc: Allocator, value: []const u8) !json.Parsed(json.Value) {
