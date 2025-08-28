@@ -2,7 +2,6 @@ const std = @import("std");
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 
-pub const fmt = std.fmt;
 pub const json = std.json;
 pub const base64 = std.base64;
 
