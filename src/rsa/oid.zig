@@ -104,7 +104,7 @@ fn testOid(expected_encoded: []const u8, expected_dot_notation: []const u8) !voi
 
     var stream: std.Io.Writer = .fixed(&buf);
     try decode(expected_encoded, &stream);
-    try std.testing.expectEqualStrings(expected_dot_notation, stream.written());
+    try std.testing.expectEqualStrings(expected_dot_notation, stream.buffered());
 }
 
 test "encode and decode" {

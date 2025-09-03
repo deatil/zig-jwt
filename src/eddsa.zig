@@ -126,7 +126,7 @@ fn checkEdDSAPublickeyOid(oid: []const u8) !void {
     var stream: std.Io.Writer = .fixed(&buf);
     try oids.decode(oid, &stream);
 
-    const oid_string = stream.written();
+    const oid_string = stream.buffered();
     if (!std.mem.eql(u8, oid_string, oid_eddsa_publickey)) {
         return error.JWTEdDSAOidError;
     }

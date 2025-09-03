@@ -98,7 +98,7 @@ pub const Parser = struct {
                 var buf: [256]u8 = undefined;
                 var stream: std.Io.Writer = .fixed(&buf);
                 try @import("./oid.zig").decode(oid, &stream);
-                log.warn("unknown oid {s} for enum {s}\n", .{ stream.written(), @typeName(Enum) });
+                log.warn("unknown oid {s} for enum {s}\n", .{ stream.buffered(), @typeName(Enum) });
             }
             return error.UnknownObjectId;
         };
