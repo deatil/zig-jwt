@@ -96,9 +96,9 @@ pub const Parser = struct {
         return Enum.oids.get(oid) orelse {
             if (builtin.mode == .Debug) {
                 var buf: [256]u8 = undefined;
-                var stream = std.Io.fixedBufferStream(&buf);
-                try @import("./oid.zig").decode(oid, stream.writer());
-                log.warn("unknown oid {s} for enum {s}\n", .{ stream.getWritten(), @typeName(Enum) });
+                var stream: std.Io.Writer = .fixed(&buf);
+                try @import("./oid.zig").decode(oid, &stream);
+                log.warn("unknown oid {s} for enum {s}\n", .{ stream.written(), @typeName(Enum) });
             }
             return error.UnknownObjectId;
         };
@@ -223,11 +223,10 @@ pub const Element = struct {
     };
 
     pub fn init(bytes: []const u8, index: Index) !Element {
-        var stream = std.Io.fixedBufferStream(bytes[index..]);
-        var reader = stream.reader();
+        var reader = std.Io.Reader.fixed(bytes[index..]);
 
-        const identifier = @as(Identifier, @bitCast(try reader.readByte()));
-        const size_or_len_size = try reader.readByte();
+        const identifier = @as(Identifier, @bitCast(try reader.takeByte()));
+        const size_or_len_size = try reader.takeByte();
 
         var start = index + 2;
         // short form between 0-127
@@ -242,7 +241,7 @@ pub const Element = struct {
         const len_size: u7 = @truncate(size_or_len_size);
         start += len_size;
         if (len_size > @sizeOf(Index)) return error.InvalidLength;
-        const len = try reader.readVarInt(Index, .big, len_size);
+        const len = try reader.takeVarInt(Index, .big, len_size);
         if (len < 128) return error.InvalidLength; // should have used short form
 
         const end = std.math.add(Index, start, len) catch return error.InvalidLength;

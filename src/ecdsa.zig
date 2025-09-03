@@ -184,10 +184,10 @@ pub fn ParseKeyDer(comptime EC: type, comptime CheckOidFn: type) type {
 
 fn checkECDSAPublickeyOid(oid: []const u8) !void {
     var buf: [256]u8 = undefined;
-    var stream = std.Io.fixedBufferStream(&buf);
-    try oids.decode(oid, stream.writer());
+    var stream: std.Io.Writer = .fixed(&buf);
+    try oids.decode(oid, &stream);
 
-    const oid_string = stream.getWritten();
+    const oid_string = stream.written();
     if (!std.mem.eql(u8, oid_string, oid_ecdsa_publickey)) {
         return error.JWTEcdsaOidError;
     }
@@ -197,10 +197,10 @@ fn checkECDSAPublickeyOid(oid: []const u8) !void {
 
 fn checkECDSAPublickeyNamedCurveOid(oid: []const u8, namedcurve_oid: []const u8) !void {
     var buf: [256]u8 = undefined;
-    var stream = std.Io.fixedBufferStream(&buf);
-    try oids.decode(oid, stream.writer());
+    var stream: std.Io.Writer = .fixed(&buf);
+    try oids.decode(oid, &stream);
 
-    const oid_string = stream.getWritten();
+    const oid_string = stream.written();
     if (!std.mem.eql(u8, oid_string, namedcurve_oid)) {
         return error.JWTEcdsaNamedCurveNotSupport;
     }

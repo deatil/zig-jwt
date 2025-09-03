@@ -5,7 +5,7 @@ A JWT (JSON Web Token) library for zig.
 
 ### Env
 
- - Zig >= 0.15.1
+ - Zig >= 0.16.0-dev.164+bc7955306.
 
 
 ### What the heck is a JWT?

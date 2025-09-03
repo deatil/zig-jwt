@@ -61,7 +61,7 @@ pub fn encode(dot_notation: []const u8, buf: []u8) EncodeError![]const u8 {
     return buf[0..i];
 }
 
-pub fn decode(encoded: []const u8, writer: anytype) @TypeOf(writer).Error!void {
+pub fn decode(encoded: []const u8, writer: anytype) !void {
     const first = @divTrunc(encoded[0], 40);
     const second = encoded[0] - first * 40;
     try writer.print("{d}.{d}", .{ first, second });
@@ -102,9 +102,9 @@ fn testOid(expected_encoded: []const u8, expected_dot_notation: []const u8) !voi
     const encoded = try encode(expected_dot_notation, &buf);
     try std.testing.expectEqualSlices(u8, expected_encoded, encoded);
 
-    var stream = std.Io.fixedBufferStream(&buf);
-    try decode(expected_encoded, stream.writer());
-    try std.testing.expectEqualStrings(expected_dot_notation, stream.getWritten());
+    var stream: std.Io.Writer = .fixed(&buf);
+    try decode(expected_encoded, &stream);
+    try std.testing.expectEqualStrings(expected_dot_notation, stream.written());
 }
 
 test "encode and decode" {

@@ -123,10 +123,10 @@ pub fn parsePublicKeyDer(bytes: []const u8) !Ed25519.PublicKey {
 
 fn checkEdDSAPublickeyOid(oid: []const u8) !void {
     var buf: [256]u8 = undefined;
-    var stream = std.Io.fixedBufferStream(&buf);
-    try oids.decode(oid, stream.writer());
+    var stream: std.Io.Writer = .fixed(&buf);
+    try oids.decode(oid, &stream);
 
-    const oid_string = stream.getWritten();
+    const oid_string = stream.written();
     if (!std.mem.eql(u8, oid_string, oid_eddsa_publickey)) {
         return error.JWTEdDSAOidError;
     }
