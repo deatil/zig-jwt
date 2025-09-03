@@ -101,7 +101,7 @@ pub fn parseSecretKeyDer(bytes: []const u8) !Ed25519.SecretKey {
 
 pub fn parsePublicKeyDer(bytes: []const u8) !Ed25519.PublicKey {
     var parser = der.Parser{ .bytes = bytes };
-    const seq = try parser.expectSequence();
+    _ = try parser.expectSequence();
 
     const oid_seq = try parser.expectSequence();
     const oid = try parser.expectOid();
@@ -110,8 +110,6 @@ pub fn parsePublicKeyDer(bytes: []const u8) !Ed25519.PublicKey {
 
     parser.seek(oid_seq.slice.end);
     const pubkey = try parser.expectBitstring();
-
-    _ = seq;
 
     if (pubkey.bytes.len != Ed25519.PublicKey.encoded_length) {
         return error.JWTEdDSAPublicKeyBytesLengthError;

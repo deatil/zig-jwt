@@ -98,7 +98,7 @@ pub fn ParseKeyDer(comptime EC: type, comptime CheckOidFn: type) type {
 
         pub fn parsePublicKeyDer(bytes: []const u8) !EC.PublicKey {
             var parser = der.Parser{ .bytes = bytes };
-            const seq = try parser.expectSequence();
+            _ = try parser.expectSequence();
 
             const oid_seq = try parser.expectSequence();
             const oid = try parser.expectOid();
@@ -111,8 +111,6 @@ pub fn ParseKeyDer(comptime EC: type, comptime CheckOidFn: type) type {
 
             parser.seek(oid_seq.slice.end);
             const pubkey = try parser.expectBitstring();
-
-            _ = seq;
 
             return EC.PublicKey.fromSec1(pubkey.bytes);
         }
