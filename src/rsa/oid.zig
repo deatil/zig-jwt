@@ -102,7 +102,7 @@ fn testOid(expected_encoded: []const u8, expected_dot_notation: []const u8) !voi
     const encoded = try encode(expected_dot_notation, &buf);
     try std.testing.expectEqualSlices(u8, expected_encoded, encoded);
 
-    var stream = std.io.fixedBufferStream(&buf);
+    var stream = std.Io.fixedBufferStream(&buf);
     try decode(expected_encoded, stream.writer());
     try std.testing.expectEqualStrings(expected_dot_notation, stream.getWritten());
 }

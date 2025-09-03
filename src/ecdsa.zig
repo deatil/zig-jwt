@@ -184,7 +184,7 @@ pub fn ParseKeyDer(comptime EC: type, comptime CheckOidFn: type) type {
 
 fn checkECDSAPublickeyOid(oid: []const u8) !void {
     var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
+    var stream = std.Io.fixedBufferStream(&buf);
     try oids.decode(oid, stream.writer());
 
     const oid_string = stream.getWritten();
@@ -197,7 +197,7 @@ fn checkECDSAPublickeyOid(oid: []const u8) !void {
 
 fn checkECDSAPublickeyNamedCurveOid(oid: []const u8, namedcurve_oid: []const u8) !void {
     var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
+    var stream = std.Io.fixedBufferStream(&buf);
     try oids.decode(oid, stream.writer());
 
     const oid_string = stream.getWritten();

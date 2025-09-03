@@ -4,8 +4,8 @@ const json = std.json;
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 
-const Writer = std.io.Writer;
-const Allocating = std.io.Writer.Allocating;
+const Writer = std.Io.Writer;
+const Allocating = std.Io.Writer.Allocating;
 
 const eddsa = @import("eddsa.zig");
 const Token = @import("token.zig").Token;
@@ -196,7 +196,7 @@ pub const ClaimsData = struct {
 test "ClaimsData" {
     const alloc = testing.allocator;
 
-    var value: std.io.Writer.Allocating = .init(alloc);
+    var value: std.Io.Writer.Allocating = .init(alloc);
 
     var b = ClaimsData.init(&value.writer);
 
@@ -225,7 +225,7 @@ test "ClaimsData" {
 test "HeadersData" {
     const alloc = testing.allocator;
 
-    var value: std.io.Writer.Allocating = .init(alloc);
+    var value: std.Io.Writer.Allocating = .init(alloc);
 
     var b = HeadersData.init(&value.writer);
 
@@ -248,7 +248,7 @@ test "HeadersData" {
 test "HeadersData 2" {
     const alloc = testing.allocator;
 
-    var value: std.io.Writer.Allocating = .init(alloc);
+    var value: std.Io.Writer.Allocating = .init(alloc);
 
     var b = HeadersData.init(&value.writer);
 

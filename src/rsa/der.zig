@@ -96,7 +96,7 @@ pub const Parser = struct {
         return Enum.oids.get(oid) orelse {
             if (builtin.mode == .Debug) {
                 var buf: [256]u8 = undefined;
-                var stream = std.io.fixedBufferStream(&buf);
+                var stream = std.Io.fixedBufferStream(&buf);
                 try @import("./oid.zig").decode(oid, stream.writer());
                 log.warn("unknown oid {s} for enum {s}\n", .{ stream.getWritten(), @typeName(Enum) });
             }
@@ -223,7 +223,7 @@ pub const Element = struct {
     };
 
     pub fn init(bytes: []const u8, index: Index) !Element {
-        var stream = std.io.fixedBufferStream(bytes[index..]);
+        var stream = std.Io.fixedBufferStream(bytes[index..]);
         var reader = stream.reader();
 
         const identifier = @as(Identifier, @bitCast(try reader.readByte()));
