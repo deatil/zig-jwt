@@ -5,7 +5,7 @@ A JWT (JSON Web Token) library for zig.
 
 ### Env
 
- - Zig >= 0.16.0-dev.164+bc7955306.
+ - Zig >= 0.16.0
 
 
 ### What the heck is a JWT?
@@ -65,10 +65,11 @@ const jwt = @import("zig-jwt");
 const std = @import("std");
 const jwt = @import("zig-jwt");
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
     const alloc = std.heap.page_allocator;
 
-    const kp = jwt.eddsa.Ed25519.KeyPair.generate();
+    const kp = jwt.eddsa.Ed25519.KeyPair.generate(io);
 
     const claims = .{
         .aud = "example.com",
@@ -104,7 +105,8 @@ pub fn main() !void {
 const std = @import("std");
 const jwt = @import("zig-jwt");
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
+    _ = init;
     const alloc = std.heap.page_allocator;
 
     const token_string = "eyJ0eXAiOiJKV0UiLCJhbGciOiJFUzI1NiIsImtpZCI6ImtpZHMifQ.eyJpc3MiOiJpc3MiLCJpYXQiOjE1Njc4NDIzODgsImV4cCI6MTc2Nzg0MjM4OCwiYXVkIjoiZXhhbXBsZS5jb20iLCJzdWIiOiJzdWIiLCJqdGkiOiJqdGkgcnJyIiwibmJmIjoxNTY3ODQyMzg4fQ.dGVzdC1zaWduYXR1cmU";
@@ -121,7 +123,8 @@ pub fn main() !void {
     // hasBeenIssuedBy: true
     std.debug.print("hasBeenIssuedBy: {} \n", .{validator.hasBeenIssuedBy("iss")});
 
-    // const now = std.time.timestamp();
+    // const ts = std.Io.Clock.real.now(io).nanoseconds;
+    // const now = @as(i64, @intCast(ts));
 
     // have functions:
     // validator.hasBeenIssuedBy("iss") // iss

@@ -1,4 +1,5 @@
 const std = @import("std");
+const Random = std.Random;
 const fmt = std.fmt;
 const ff = std.crypto.ff;
 const testing = std.testing;
@@ -101,10 +102,14 @@ pub const PublicKey = struct {
         em[1] = 2;
 
         const ps = em[2..][0 .. k - msg.len - 3];
+
+        var prng = Random.DefaultPrng.init(1234);
+        const random = prng.random();
+
         // Section: 7.2.1
         // PS consists of pseudo-randomly generated nonzero octets.
         for (ps) |*v| {
-            v.* = std.crypto.random.uintLessThan(u8, 0xff) + 1;
+            v.* = random.uintLessThan(u8, 0xff) + 1;
         }
 
         em[em.len - msg.len - 1] = 0;
@@ -134,7 +139,10 @@ pub const PublicKey = struct {
         var em = out[0..k];
         em[0] = 0;
         const seed = em[1..][0..Hash.digest_length];
-        std.crypto.random.bytes(seed);
+
+        var prng = Random.DefaultPrng.init(1234);
+        const random = prng.random();
+        random.bytes(seed);
 
         // DB = lHash || PS || 0x01 || M.
         var db = em[1 + seed.len ..];
@@ -695,7 +703,10 @@ pub fn Pss(comptime Hash: type) type {
 
                 const salt = if (self.salt) |s| s else brk: {
                     var res: [default_salt_len]u8 = undefined;
-                    std.crypto.random.bytes(&res);
+
+                    var prng = Random.DefaultPrng.init(1234);
+                    const random = prng.random();
+                    random.bytes(&res);
                     break :brk &res;
                 };
 

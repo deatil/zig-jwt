@@ -269,6 +269,7 @@ test "HeadersData 2" {
 }
 
 test "Builder" {
+    const io = testing.io;
     const alloc = testing.allocator;
 
     var build = Builder(eddsa.SigningEdDSA, eddsa.Ed25519.SecretKey).init(alloc);
@@ -312,7 +313,7 @@ test "Builder" {
 
     // =======
 
-    const kp = eddsa.Ed25519.KeyPair.generate();
+    const kp = eddsa.Ed25519.KeyPair.generate(io);
 
     var t = try build.getToken(kp.secret_key);
     const token_string = try t.signedString();
@@ -329,6 +330,7 @@ test "Builder" {
 }
 
 test "Builder 2" {
+    const io = testing.io;
     const alloc = testing.allocator;
 
     var build = Builder(eddsa.SigningEdDSA, eddsa.Ed25519.SecretKey).init(alloc);
@@ -354,7 +356,7 @@ test "Builder 2" {
     try h.setData("alg", "ES256");
     try h.end();
 
-    const kp = eddsa.Ed25519.KeyPair.generate();
+    const kp = eddsa.Ed25519.KeyPair.generate(io);
 
     var t = try build.getToken(kp.secret_key);
     const token_string = try t.signedString();
@@ -366,6 +368,7 @@ test "Builder 2" {
 }
 
 test "Builder 3" {
+    const io = testing.io;
     const alloc = testing.allocator;
 
     var build = Builder(eddsa.SigningEdDSA, eddsa.Ed25519.SecretKey).init(alloc);
@@ -393,7 +396,7 @@ test "Builder 3" {
 
     // =======
 
-    const kp = eddsa.Ed25519.KeyPair.generate();
+    const kp = eddsa.Ed25519.KeyPair.generate(io);
 
     var t = try build.getToken(kp.secret_key);
     const token_string = try t.signedString();

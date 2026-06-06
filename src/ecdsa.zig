@@ -454,6 +454,7 @@ test "SigningES256K with der pkcs8 key" {
 }
 
 test "SigningES256" {
+    const io = testing.io;
     const alloc = testing.allocator;
 
     const h = SigningES256.init(alloc);
@@ -463,7 +464,7 @@ test "SigningES256" {
     try testing.expectEqual(64, signLength);
     try testing.expectEqualStrings("ES256", alg);
 
-    const kp = ecdsa.EcdsaP256Sha256.KeyPair.generate();
+    const kp = ecdsa.EcdsaP256Sha256.KeyPair.generate(io);
 
     const msg = "test-data";
 
@@ -479,6 +480,7 @@ test "SigningES256" {
 }
 
 test "SigningES384" {
+    const io = testing.io;
     const alloc = testing.allocator;
 
     const h = SigningES384.init(alloc);
@@ -488,7 +490,7 @@ test "SigningES384" {
     try testing.expectEqual(96, signLength);
     try testing.expectEqualStrings("ES384", alg);
 
-    const kp = ecdsa.EcdsaP384Sha384.KeyPair.generate();
+    const kp = ecdsa.EcdsaP384Sha384.KeyPair.generate(io);
 
     const msg = "test-data";
 
@@ -504,6 +506,7 @@ test "SigningES384" {
 }
 
 test "SigningES256K" {
+    const io = testing.io;
     const alloc = testing.allocator;
 
     const h = SigningES256K.init(alloc);
@@ -513,7 +516,7 @@ test "SigningES256K" {
     try testing.expectEqual(64, signLength);
     try testing.expectEqualStrings("ES256K", alg);
 
-    const kp = ecdsa.EcdsaSecp256k1Sha256.KeyPair.generate();
+    const kp = ecdsa.EcdsaSecp256k1Sha256.KeyPair.generate(io);
 
     const msg = "test-data";
 

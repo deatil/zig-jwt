@@ -146,10 +146,12 @@ pub const Validator = struct {
 };
 
 test "Validator isExpired" {
+    const io = testing.io;
     const alloc = testing.allocator;
 
     const check1 = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJleHAiOjE3Mzk4MTAzOTB9.dGVzdC1zaWduYXR1cmU";
-    const now = time.timestamp();
+    const ts = std.Io.Clock.real.now(io).nanoseconds;
+    const now = @as(i64, @intCast(ts));
 
     var token = Token.init(alloc);
     token.parse(check1);
@@ -168,10 +170,12 @@ test "Validator isExpired" {
 }
 
 test "Validator isMinimumTimeBefore" {
+    const io = testing.io;
     const alloc = testing.allocator;
 
     const check1 = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJhdWQiOiJleGFtcGxlLmNvbSIsImlhdCI6ImZvbyIsIm5iZiI6MTczOTgxNjU0MH0.dGVzdC1zaWduYXR1cmU";
-    const now = time.timestamp();
+    const ts = std.Io.Clock.real.now(io).nanoseconds;
+    const now = @as(i64, @intCast(ts));
 
     var token = Token.init(alloc);
     token.parse(check1);
@@ -191,7 +195,7 @@ test "Validator" {
     const alloc = testing.allocator;
 
     const check1 = "eyJ0eXAiOiJKV0UiLCJhbGciOiJFUzI1NiIsImtpZCI6ImtpZHMifQ.eyJpc3MiOiJpc3MiLCJpYXQiOjE1Njc4NDIzODgsImV4cCI6MTc2Nzg0MjM4OCwiYXVkIjoiZXhhbXBsZS5jb20iLCJzdWIiOiJzdWIiLCJqdGkiOiJqdGkgcnJyIiwibmJmIjoxNTY3ODQyMzg4fQ.dGVzdC1zaWduYXR1cmU";
-    const now = time.timestamp();
+    const now = @as(i64, 1567842388);
 
     var token = Token.init(alloc);
     token.parse(check1);

@@ -44,7 +44,7 @@ test "getSigningMethod" {
 test "parse JWTTypeInvalid" {
     const alloc = testing.allocator;
 
-    const kp = jwt.eddsa.Ed25519.KeyPair.generate();
+    const kp = jwt.eddsa.Ed25519.KeyPair.generate(testing.io);
 
     const token_string = "eyJ0eXAiOiJKV0UiLCJhbGciOiJFUzI1NiJ9.eyJhdWQiOiJleGFtcGxlLmNvbSIsImlhdCI6ImZvbyJ9.dGVzdC1zaWduYXR1cmU";
 
@@ -61,7 +61,7 @@ test "parse JWTTypeInvalid" {
 test "parse JWTSignatureInvalid" {
     const alloc = testing.allocator;
 
-    const kp = jwt.ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate();
+    const kp = jwt.ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate(testing.io);
 
     const token_string = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJhdWQiOiJleGFtcGxlLmNvbSIsImlhdCI6ImZvbyJ9.dGVzdC1zaWduYXR1cmU";
 
@@ -79,7 +79,8 @@ test "Token Validator" {
     const alloc = testing.allocator;
 
     const check1 = "eyJ0eXAiOiJKV0UiLCJhbGciOiJFUzI1NiIsImtpZCI6ImtpZHMifQ.eyJpc3MiOiJpc3MiLCJpYXQiOjE1Njc4NDIzODgsImV4cCI6MTc2Nzg0MjM4OCwiYXVkIjoiZXhhbXBsZS5jb20iLCJzdWIiOiJzdWIiLCJqdGkiOiJqdGkgcnJyIiwibmJmIjoxNTY3ODQyMzg4fQ.dGVzdC1zaWduYXR1cmU";
-    const now = time.timestamp();
+    const ts = std.Io.Clock.real.now(testing.io).nanoseconds;
+    const now = @as(i64, @intCast(ts));
 
     var token = jwt.Token.init(alloc);
     token.parse(check1);
@@ -101,7 +102,7 @@ test "Token Validator" {
 test "SigningMethodEdDSA builder" {
     const alloc = testing.allocator;
 
-    const kp = jwt.eddsa.Ed25519.KeyPair.generate();
+    const kp = jwt.eddsa.Ed25519.KeyPair.generate(testing.io);
 
     const claims = .{
         .aud = "example.com",
@@ -140,7 +141,7 @@ test "SigningMethodEdDSA builder" {
 test "SigningMethodEdDSA signWithHeader" {
     const alloc = testing.allocator;
 
-    const kp = jwt.eddsa.Ed25519.KeyPair.generate();
+    const kp = jwt.eddsa.Ed25519.KeyPair.generate(testing.io);
 
     const claims = .{
         .aud = "example.com",
@@ -186,7 +187,7 @@ test "SigningMethodEdDSA signWithHeader" {
 test "SigningMethodEdDSA" {
     const alloc = testing.allocator;
 
-    const kp = jwt.eddsa.Ed25519.KeyPair.generate();
+    const kp = jwt.eddsa.Ed25519.KeyPair.generate(testing.io);
 
     const claims = .{
         .aud = "example.com",
@@ -213,7 +214,7 @@ test "SigningMethodEdDSA" {
 test "SigningMethodES256" {
     const alloc = testing.allocator;
 
-    const kp = jwt.ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate();
+    const kp = jwt.ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate(testing.io);
 
     const claims = .{
         .aud = "example.com",
@@ -240,7 +241,7 @@ test "SigningMethodES256" {
 test "SigningMethodES384" {
     const alloc = testing.allocator;
 
-    const kp = jwt.ecdsa.ecdsa.EcdsaP384Sha384.KeyPair.generate();
+    const kp = jwt.ecdsa.ecdsa.EcdsaP384Sha384.KeyPair.generate(testing.io);
 
     const claims = .{
         .aud = "example.com",
@@ -267,7 +268,7 @@ test "SigningMethodES384" {
 test "SigningMethodES256K" {
     const alloc = testing.allocator;
 
-    const kp = jwt.ecdsa.ecdsa.EcdsaSecp256k1Sha256.KeyPair.generate();
+    const kp = jwt.ecdsa.ecdsa.EcdsaSecp256k1Sha256.KeyPair.generate(testing.io);
 
     const claims = .{
         .aud = "example.com",
@@ -885,7 +886,7 @@ test "getTokenHeader" {
 test "SigningMethodES256 with JWTClaims" {
     const alloc = testing.allocator;
 
-    const kp = jwt.ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate();
+    const kp = jwt.ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate(testing.io);
 
     const claims: jwt.JWTClaims = .{
         .aud = "example.com",
@@ -1411,7 +1412,7 @@ test "SigningMethodPS256 Check with pkcs8 key" {
 test "SigningMethodEdDSA type" {
     const alloc = testing.allocator;
 
-    const kp = jwt.eddsa.Ed25519.KeyPair.generate();
+    const kp = jwt.eddsa.Ed25519.KeyPair.generate(testing.io);
 
     const headers = .{
         .alg = "EdDSA",
@@ -1446,7 +1447,7 @@ test "SigningMethodEdDSA type" {
 test "SigningMethodEdDSA JWTTokenInvalid" {
     const alloc = testing.allocator;
 
-    const kp = jwt.eddsa.Ed25519.KeyPair.generate();
+    const kp = jwt.eddsa.Ed25519.KeyPair.generate(testing.io);
 
     const token_string = "eyJhbGciOiJFRDI1NTE5IiwidHlwIjoiSldUIn0";
 
@@ -1463,7 +1464,7 @@ test "SigningMethodEdDSA JWTTokenInvalid" {
 test "SigningMethodEdDSA JWTTypeInvalid" {
     const alloc = testing.allocator;
 
-    const kp = jwt.eddsa.Ed25519.KeyPair.generate();
+    const kp = jwt.eddsa.Ed25519.KeyPair.generate(testing.io);
 
     const headers = .{
         .typ = "JWE",
@@ -1494,7 +1495,7 @@ test "SigningMethodEdDSA JWTTypeInvalid" {
 test "SigningMethodEdDSA JWTAlgoInvalid" {
     const alloc = testing.allocator;
 
-    const kp = jwt.ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate();
+    const kp = jwt.ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate(testing.io);
 
     const headers = .{
         .typ = "JWT",

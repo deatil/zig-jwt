@@ -162,6 +162,7 @@ test "SigningEdDSA with der key" {
 }
 
 test "SigningEdDSA" {
+    const io = testing.io;
     const alloc = testing.allocator;
 
     const h = SigningEdDSA.init(alloc);
@@ -171,7 +172,7 @@ test "SigningEdDSA" {
     try testing.expectEqual(64, signLength);
     try testing.expectEqualStrings("EdDSA", alg);
 
-    const kp = Ed25519.KeyPair.generate();
+    const kp = Ed25519.KeyPair.generate(io);
 
     const msg = "test-data";
 
@@ -186,6 +187,7 @@ test "SigningEdDSA" {
 }
 
 test "SigningED25519" {
+    const io = testing.io;
     const alloc = testing.allocator;
 
     const h = SigningED25519.init(alloc);
@@ -195,7 +197,7 @@ test "SigningED25519" {
     try testing.expectEqual(64, signLength);
     try testing.expectEqualStrings("ED25519", alg);
 
-    const kp = Ed25519.KeyPair.generate();
+    const kp = Ed25519.KeyPair.generate(io);
 
     const msg = "test-data";
 
