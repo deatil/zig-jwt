@@ -67,7 +67,7 @@ const jwt = @import("zig-jwt");
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
-    const alloc = std.heap.page_allocator;
+    const alloc = init.arena.allocator();
 
     const kp = jwt.eddsa.Ed25519.KeyPair.generate(io);
 
@@ -106,8 +106,7 @@ const std = @import("std");
 const jwt = @import("zig-jwt");
 
 pub fn main(init: std.process.Init) !void {
-    _ = init;
-    const alloc = std.heap.page_allocator;
+    const alloc = init.arena.allocator();
 
     const token_string = "eyJ0eXAiOiJKV0UiLCJhbGciOiJFUzI1NiIsImtpZCI6ImtpZHMifQ.eyJpc3MiOiJpc3MiLCJpYXQiOjE1Njc4NDIzODgsImV4cCI6MTc2Nzg0MjM4OCwiYXVkIjoiZXhhbXBsZS5jb20iLCJzdWIiOiJzdWIiLCJqdGkiOiJqdGkgcnJyIiwibmJmIjoxNTY3ODQyMzg4fQ.dGVzdC1zaWduYXR1cmU";
 
@@ -201,7 +200,7 @@ var p256k_secret_key: ecdsa.EcdsaSecp256k1Sha256.SecretKey = undefined;
 var p256k_public_key: ecdsa.EcdsaSecp256k1Sha256.PublicKey = undefined;
 
 // generate p256 public key
-const p256_kp = ecdsa.EcdsaP256Sha256.KeyPair.generate();
+const p256_kp = ecdsa.EcdsaP256Sha256.KeyPair.generate(io);
 // from plain bytes
 const p256_secret_key = try ecdsa.EcdsaP256Sha256.SecretKey.fromBytes(pri_key_bytes);
 const p256_public_key = try ecdsa.EcdsaP256Sha256.PublicKey.fromSec1(pub_key_bytes);
@@ -211,7 +210,7 @@ const p256_secret_key = try jwt.ecdsa.ParseP256Sha256Der.parseSecretKeyPKCS8Der(
 const p256_public_key = try jwt.ecdsa.ParseP256Sha256Der.parsePublicKeyDer(pub_key_bytes);
 
 // generate p384 public key
-const p384_kp = ecdsa.EcdsaP384Sha384.KeyPair.generate();
+const p384_kp = ecdsa.EcdsaP384Sha384.KeyPair.generate(io);
 // from plain bytes
 const p384_secret_key = try ecdsa.EcdsaP384Sha384.SecretKey.fromBytes(pri_key_bytes);
 const p384_public_key = try ecdsa.EcdsaP384Sha384.PublicKey.fromSec1(pub_key_bytes);
@@ -221,7 +220,7 @@ const p384_secret_key = try jwt.ecdsa.ParseP384Sha384Der.parseSecretKeyPKCS8Der(
 const p384_public_key = try jwt.ecdsa.ParseP384Sha384Der.parsePublicKeyDer(pub_key_bytes);
 
 // generate p256k public key
-const p256k_kp = ecdsa.EcdsaSecp256k1Sha256.KeyPair.generate();
+const p256k_kp = ecdsa.EcdsaSecp256k1Sha256.KeyPair.generate(io);
 // from plain bytes
 const p256k_secret_key = try ecdsa.EcdsaSecp256k1Sha256.SecretKey.fromBytes(pri_key_bytes);
 const p256k_public_key = try ecdsa.EcdsaSecp256k1Sha256.PublicKey.fromSec1(pub_key_bytes);
@@ -239,7 +238,7 @@ var secret_key: Ed25519.SecretKey = undefined;
 var public_key: Ed25519.PublicKey = undefined;
 
 // generate public key
-const kp = Ed25519.KeyPair.generate();
+const kp = Ed25519.KeyPair.generate(io);
 
 // from plain bytes
 const secret_key = try Ed25519.SecretKey.fromBytes(pri_key_bytes);
