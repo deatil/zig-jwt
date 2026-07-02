@@ -1522,3 +1522,29 @@ test "SigningMethodEdDSA JWTAlgoInvalid" {
     };
     try testing.expectEqual(true, need_true);
 }
+
+test "SigningMethodEdDSA with function" {
+    const alloc = testing.allocator;
+    const Ed25519 = std.crypto.sign.Ed25519;
+
+    const kp = Ed25519.KeyPair.generate(testing.io);
+
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+
+    const token_string = try jwt.sign(Ed25519.SecretKey, alloc, jwt.SigningMethodEdDSA, claims, kp.secret_key);
+    defer alloc.free(token_string);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    var parsed = try jwt.parse(Ed25519.PublicKey, alloc, jwt.SigningMethodEdDSA, token_string, kp.public_key);
+    defer parsed.deinit();
+
+    const claims2 = try parsed.getClaims();
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
+}

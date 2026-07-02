@@ -159,6 +159,20 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
     };
 }
 
+// use SigningMethod with header to make token
+pub fn sign(comptime T: type, alloc: Allocator, SigningMethod: type, claims: anytype, key: T) ![]const u8 {
+    const s = SigningMethod.init(alloc);
+    const token_string = try s.sign(claims, key);
+    return token_string;
+}
+
+// parse token and token signature verify
+pub fn parse(comptime T: type, alloc: Allocator, SigningMethod: type, token_string: []const u8, key: T) !Token {
+    const p = SigningMethod.init(alloc);
+    const parsed = try p.parse(token_string, key);
+    return parsed;
+}
+
 // jwt claims struct
 pub const JWTClaims = struct {
     // Issuer
