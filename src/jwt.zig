@@ -45,6 +45,24 @@ pub const SigningMethodBLAKE2B = JWT(blake2b.SigningBLAKE2B, []const u8, []const
 
 pub const SigningMethodNone = JWT(none.SigningNone, []const u8, []const u8);
 
+// jwt claims struct
+pub const JWTClaims = struct {
+    // Issuer
+    iss: ?[]const u8 = null,
+    // Issued At
+    iat: ?i64 = null,
+    // Expiration Time
+    exp: ?i64 = null,
+    // Audience
+    aud: ?[]const u8 = null,
+    // Subject
+    sub: ?[]const u8 = null,
+    // JWT ID
+    jti: ?[]const u8 = null,
+    // Not Before
+    nbf: ?i64 = null,
+};
+
 pub const Error = error{
     JWTVerifyFail,
     JWTSigningMethodNotExists,
@@ -159,7 +177,7 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
     };
 }
 
-// use SigningMethod with header to make token
+// use SigningMethod to make token
 pub fn sign(comptime T: type, alloc: Allocator, SigningMethod: type, claims: anytype, key: T) ![]const u8 {
     const s = SigningMethod.init(alloc);
     const token_string = try s.sign(claims, key);
@@ -172,24 +190,6 @@ pub fn parse(comptime T: type, alloc: Allocator, SigningMethod: type, token_stri
     const parsed = try p.parse(token_string, key);
     return parsed;
 }
-
-// jwt claims struct
-pub const JWTClaims = struct {
-    // Issuer
-    iss: ?[]const u8 = null,
-    // Issued At
-    iat: ?i64 = null,
-    // Expiration Time
-    exp: ?i64 = null,
-    // Audience
-    aud: ?[]const u8 = null,
-    // Subject
-    sub: ?[]const u8 = null,
-    // JWT ID
-    jti: ?[]const u8 = null,
-    // Not Before
-    nbf: ?i64 = null,
-};
 
 pub fn getSigningMethod(name: []const u8) !type {
     if (utils.eq(name, "RS256")) {
