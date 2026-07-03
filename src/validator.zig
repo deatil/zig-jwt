@@ -6,7 +6,6 @@ const utils = @import("utils.zig");
 const Token = @import("token.zig").Token;
 
 pub const Validator = struct {
-    token: *Token,
     claims: json.Parsed(json.Value),
     leeway: i64 = 0,
 
@@ -16,14 +15,12 @@ pub const Validator = struct {
         const claims = try token.getClaims();
 
         return .{
-            .token = token,
             .claims = claims,
             .leeway = 0,
         };
     }
 
     pub fn deinit(self: *Self) void {
-        self.token.deinit();
         self.claims.deinit();
     }
 
@@ -154,6 +151,7 @@ test "Validator isExpired" {
 
     var token = Token.init(alloc);
     token.parse(check1);
+    defer token.deinit();
 
     var validator = try Validator.init(&token);
     defer validator.deinit();
@@ -179,6 +177,8 @@ test "Validator isMinimumTimeBefore" {
     var token = Token.init(alloc);
     token.parse(check1);
 
+    defer token.deinit();
+
     var validator = try Validator.init(&token);
     defer validator.deinit();
 
@@ -198,6 +198,8 @@ test "Validator" {
 
     var token = Token.init(alloc);
     token.parse(check1);
+
+    defer token.deinit();
 
     var validator = try Validator.init(&token);
     defer validator.deinit();
@@ -225,6 +227,8 @@ test "Validator" {
 
     var token2 = Token.init(alloc);
     token2.parse(check1);
+
+    defer token2.deinit();
 
     var validator2 = try Validator.init(&token2);
     defer validator2.deinit();
