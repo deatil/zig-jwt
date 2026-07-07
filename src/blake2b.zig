@@ -46,7 +46,7 @@ pub fn SignBlake2b(comptime Hash: type, comptime name: []const u8) type {
             return self.alloc.dupe(u8, out[0..]);
         }
 
-        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: []const u8) bool {
+        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: []const u8) !bool {
             if (key.len * 8 < 256) {
                 return false;
             }
@@ -97,7 +97,7 @@ test "SigningBLAKE2B" {
 
     try testing.expectEqualStrings(sign, singed_res[0..]);
 
-    const veri = h.verify(msg, signed, key);
+    const veri = try h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
 }

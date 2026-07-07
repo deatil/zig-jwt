@@ -161,7 +161,8 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
             const signing_string = try t.getMsg();
             defer self.alloc.free(signing_string);
 
-            if (!self.signer.verify(signing_string, token_sign, verify_key)) {
+            const verifyed = self.signer.verify(signing_string, token_sign, verify_key) catch false;
+            if (!verifyed) {
                 defer t.deinit();
 
                 return Error.JWTVerifyFail;

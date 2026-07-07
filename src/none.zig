@@ -38,7 +38,7 @@ pub fn SignNone(comptime name: []const u8) type {
             return out;
         }
 
-        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: []const u8) bool {
+        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: []const u8) !bool {
             _ = self;
             _ = msg;
             _ = key;
@@ -73,6 +73,7 @@ test "SigningNone" {
 
     var buf2: [5]u8 = "hello".*;
     const signed2: []u8 = &buf2;
-    const veri2 = h.verify(msg, signed2[0..], "");
+    const veri2 = try h.verify(msg, signed2[0..], "");
+
     try testing.expectEqual(false, veri2);
 }

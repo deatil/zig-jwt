@@ -51,13 +51,11 @@ pub fn SignRSAPss(comptime RSAPssType: type, comptime name: []const u8) type {
             return self.alloc.dupe(u8, signed[0..]);
         }
 
-        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: rsa.PublicKey) bool {
+        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: rsa.PublicKey) !bool {
             _ = self;
 
             var verifier = RSAPssType.Signature.fromBytes(signature);
-            verifier.verify(msg, key, rsa.pss_salt_length_auto) catch {
-                return false;
-            };
+            try verifier.verify(msg, key, rsa.pss_salt_length_auto);
 
             return true;
         }
@@ -93,7 +91,7 @@ test "SigningPS256" {
 
     try testing.expectEqual(256, signed.len);
 
-    const veri = h.verify(msg, signed, public_key);
+    const veri = try h.verify(msg, signed, public_key);
 
     try testing.expectEqual(true, veri);
 }
@@ -127,7 +125,7 @@ test "SigningPS384" {
 
     try testing.expectEqual(256, signed.len);
 
-    const veri = h.verify(msg, signed, public_key);
+    const veri = try h.verify(msg, signed, public_key);
 
     try testing.expectEqual(true, veri);
 }
@@ -161,7 +159,7 @@ test "SigningPS512" {
 
     try testing.expectEqual(256, signed.len);
 
-    const veri = h.verify(msg, signed, public_key);
+    const veri = try h.verify(msg, signed, public_key);
 
     try testing.expectEqual(true, veri);
 }
@@ -195,7 +193,7 @@ test "SigningPS256 check" {
 
     try testing.expectEqual(256, signed.len);
 
-    const veri = h.verify(msg, signed, public_key);
+    const veri = try h.verify(msg, signed, public_key);
     try testing.expectEqual(true, veri);
 
     // =========
@@ -204,6 +202,6 @@ test "SigningPS256 check" {
     var decoded: [check2.len]u8 = undefined;
     const res = try fmt.hexToBytes(&decoded, check2);
 
-    const veri2 = h.verify(msg, res, public_key);
+    const veri2 = h.verify(msg, res, public_key) catch false;
     try testing.expectEqual(false, veri2);
 }

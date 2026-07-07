@@ -45,7 +45,7 @@ pub fn SignHmac(comptime Hash: type, comptime name: []const u8) type {
             return self.alloc.dupe(u8, out[0..]);
         }
 
-        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: []const u8) bool {
+        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: []const u8) !bool {
             const sign_length = self.signLength();
             if (signature.len != sign_length) {
                 return false;
@@ -88,7 +88,7 @@ test "SigningHMD5" {
 
     try testing.expectEqualStrings(sign, singed_res[0..]);
 
-    const veri = h.verify(msg, signed, key);
+    const veri = try h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
 }
@@ -115,7 +115,7 @@ test "SigningHSHA1" {
 
     try testing.expectEqualStrings(sign, singed_res[0..]);
 
-    const veri = h.verify(msg, signed, key);
+    const veri = try h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
 }
@@ -142,7 +142,7 @@ test "SigningHS224" {
 
     try testing.expectEqualStrings(sign, singed_res[0..]);
 
-    const veri = h.verify(msg, signed, key);
+    const veri = try h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
 }
@@ -169,7 +169,7 @@ test "SigningHS256" {
 
     try testing.expectEqualStrings(sign, singed_res[0..]);
 
-    const veri = h.verify(msg, signed, key);
+    const veri = try h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
 }
@@ -196,7 +196,7 @@ test "SigningHS384" {
 
     try testing.expectEqualStrings(sign, singed_res[0..]);
 
-    const veri = h.verify(msg, signed, key);
+    const veri = try h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
 }
@@ -223,7 +223,7 @@ test "SigningHS512" {
 
     try testing.expectEqualStrings(sign, singed_res[0..]);
 
-    const veri = h.verify(msg, signed, key);
+    const veri = try h.verify(msg, signed, key);
 
     try testing.expectEqual(true, veri);
 }

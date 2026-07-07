@@ -297,7 +297,7 @@ fn SignCustom(comptime EC: type, comptime name: []const u8) type {
             return self.alloc.dupe(u8, out[0..]);
         }
 
-        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: EC.PublicKey) bool {
+        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: EC.PublicKey) !bool {
             const sign_length = self.signLength();
             if (signature.len != sign_length) {
                 return false;
@@ -307,9 +307,7 @@ fn SignCustom(comptime EC: type, comptime name: []const u8) type {
             @memcpy(signed[0..], signature);
 
             const sig = EC.Signature.fromBytes(signed);
-            sig.verify(msg, key) catch {
-                return false;
-            };
+            try sig.verify(msg, key);
 
             return true;
         }

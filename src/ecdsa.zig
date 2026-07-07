@@ -47,7 +47,7 @@ pub fn SignECDSA(comptime EC: type, comptime name: []const u8) type {
             return self.alloc.dupe(u8, out[0..]);
         }
 
-        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: EC.PublicKey) bool {
+        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: EC.PublicKey) !bool {
             const sign_length = self.signLength();
             if (signature.len != sign_length) {
                 return false;
@@ -57,9 +57,7 @@ pub fn SignECDSA(comptime EC: type, comptime name: []const u8) type {
             @memcpy(signed[0..], signature);
 
             const sig = EC.Signature.fromBytes(signed);
-            sig.verify(msg, key) catch {
-                return false;
-            };
+            try sig.verify(msg, key);
 
             return true;
         }
@@ -231,7 +229,7 @@ test "SigningES256 with der key" {
 
     try testing.expectEqual(64, signed.len);
 
-    const veri = h.verify(msg, signed, public_key);
+    const veri = try h.verify(msg, signed, public_key);
 
     try testing.expectEqual(true, veri);
 }
@@ -260,7 +258,7 @@ test "SigningES256 with der pkcs8 key" {
 
     try testing.expectEqual(64, signed.len);
 
-    const veri = h.verify(msg, signed, public_key);
+    const veri = try h.verify(msg, signed, public_key);
 
     try testing.expectEqual(true, veri);
 }
@@ -289,7 +287,7 @@ test "SigningES256 with der pkcs8 key no namedcurve" {
 
     try testing.expectEqual(64, signed.len);
 
-    const veri = h.verify(msg, signed, public_key);
+    const veri = try h.verify(msg, signed, public_key);
 
     try testing.expectEqual(true, veri);
 }
@@ -320,7 +318,7 @@ test "SigningES256 with der key use parseSecretKeyDerAuto" {
 
         try testing.expectEqual(64, signed.len);
 
-        const veri = h.verify(msg, signed, public_key);
+        const veri = try h.verify(msg, signed, public_key);
 
         try testing.expectEqual(true, veri);
     }
@@ -348,7 +346,7 @@ test "SigningES256 with der key use parseSecretKeyDerAuto" {
 
         try testing.expectEqual(64, signed.len);
 
-        const veri = h.verify(msg, signed, public_key);
+        const veri = try h.verify(msg, signed, public_key);
 
         try testing.expectEqual(true, veri);
     }
@@ -384,7 +382,7 @@ test "SigningES384 with der key" {
 
     try testing.expectEqual(96, signed.len);
 
-    const veri = h.verify(msg, signed, public_key);
+    const veri = try h.verify(msg, signed, public_key);
 
     try testing.expectEqual(true, veri);
 }
@@ -419,7 +417,7 @@ test "SigningES384 with der pkcs8 key" {
 
     try testing.expectEqual(96, signed.len);
 
-    const veri = h.verify(msg, signed, public_key);
+    const veri = try h.verify(msg, signed, public_key);
 
     try testing.expectEqual(true, veri);
 }
@@ -448,7 +446,7 @@ test "SigningES256K with der pkcs8 key" {
 
     try testing.expectEqual(64, signed.len);
 
-    const veri = h.verify(msg, signed, public_key);
+    const veri = try h.verify(msg, signed, public_key);
 
     try testing.expectEqual(true, veri);
 }
@@ -474,7 +472,7 @@ test "SigningES256" {
 
     try testing.expectEqual(64, signed.len);
 
-    const veri = h.verify(msg, signed, kp.public_key);
+    const veri = try h.verify(msg, signed, kp.public_key);
 
     try testing.expectEqual(true, veri);
 }
@@ -500,7 +498,7 @@ test "SigningES384" {
 
     try testing.expectEqual(96, signed.len);
 
-    const veri = h.verify(msg, signed, kp.public_key);
+    const veri = try h.verify(msg, signed, kp.public_key);
 
     try testing.expectEqual(true, veri);
 }
@@ -526,7 +524,7 @@ test "SigningES256K" {
 
     try testing.expectEqual(64, signed.len);
 
-    const veri = h.verify(msg, signed, kp.public_key);
+    const veri = try h.verify(msg, signed, kp.public_key);
 
     try testing.expectEqual(true, veri);
 }

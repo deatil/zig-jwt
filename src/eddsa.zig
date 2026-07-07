@@ -44,7 +44,7 @@ pub fn SignEdDSA(comptime name: []const u8) type {
             return self.alloc.dupe(u8, out[0..]);
         }
 
-        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: Ed25519.PublicKey) bool {
+        pub fn verify(self: Self, msg: []const u8, signature: []u8, key: Ed25519.PublicKey) !bool {
             const sign_length = self.signLength();
             if (signature.len != sign_length) {
                 return false;
@@ -54,9 +54,7 @@ pub fn SignEdDSA(comptime name: []const u8) type {
             @memcpy(signed[0..], signature);
 
             const sig = Ed25519.Signature.fromBytes(signed);
-            sig.verify(msg, key) catch {
-                return false;
-            };
+            try sig.verify(msg, key);
 
             return true;
         }
@@ -156,7 +154,7 @@ test "SigningEdDSA with der key" {
 
     try testing.expectEqual(64, signed.len);
 
-    const veri = h.verify(msg, signed, public_key);
+    const veri = try h.verify(msg, signed, public_key);
 
     try testing.expectEqual(true, veri);
 }
@@ -181,7 +179,7 @@ test "SigningEdDSA" {
 
     try testing.expectEqual(64, signed.len);
 
-    const veri = h.verify(msg, signed, kp.public_key);
+    const veri = try h.verify(msg, signed, kp.public_key);
 
     try testing.expectEqual(true, veri);
 }
@@ -206,7 +204,7 @@ test "SigningED25519" {
 
     try testing.expectEqual(64, signed.len);
 
-    const veri = h.verify(msg, signed, kp.public_key);
+    const veri = try h.verify(msg, signed, kp.public_key);
 
     try testing.expectEqual(true, veri);
 }
