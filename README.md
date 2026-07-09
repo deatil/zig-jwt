@@ -122,8 +122,7 @@ pub fn main(init: std.process.Init) !void {
     // hasBeenIssuedBy: true
     std.debug.print("hasBeenIssuedBy: {} \n", .{validator.hasBeenIssuedBy("iss")});
 
-    // const ts = std.Io.Clock.real.now(io).nanoseconds;
-    // const now = @as(i64, @intCast(ts));
+    // const now = std.Io.Timestamp.now(io, .real).toNanoseconds();
 
     // have functions:
     // validator.hasBeenIssuedBy("iss") // iss
