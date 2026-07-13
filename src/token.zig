@@ -46,22 +46,27 @@ pub const Token = struct {
     }
 
     pub fn withHeader(self: *Self, header: []const u8) !void {
+        self.alloc.free(self.header);
         self.header = try self.alloc.dupe(u8, header);
     }
 
     pub fn setHeader(self: *Self, header: anytype) !void {
+        self.alloc.free(self.header);
         self.header = try utils.jsonEncode(self.alloc, header);
     }
 
     pub fn withClaims(self: *Self, claims: []const u8) !void {
+        self.alloc.free(self.claims);
         self.claims = try self.alloc.dupe(u8, claims);
     }
 
     pub fn setClaims(self: *Self, claims: anytype) !void {
+        self.alloc.free(self.claims);
         self.claims = try utils.jsonEncode(self.alloc, claims);
     }
 
     pub fn withSignature(self: *Self, signature: []const u8) !void {
+        self.alloc.free(self.signature);
         self.signature = try self.alloc.dupe(u8, signature);
     }
 
@@ -99,10 +104,9 @@ pub const Token = struct {
     }
 
     pub fn parse(self: *Self, token_string: []const u8) void {
+        self.deinit();
+
         self.raw = self.alloc.dupe(u8, token_string) catch "";
-        self.header = "";
-        self.claims = "";
-        self.signature = "";
 
         if (token_string.len == 0) {
             return;
@@ -436,4 +440,76 @@ test "Token 3" {
     try testing.expectEqualStrings(header.typ, header33.value.object.get("typ").?.string);
     try testing.expectEqualStrings(header.alg, header33.value.object.get("alg").?.string);
     try testing.expectEqualStrings(header.kid.?, header33.value.object.get("kid").?.string);
+}
+
+test "Token with check" {
+    const alloc = testing.allocator;
+
+    const header: Token.Header = .{
+        .typ = "JWE",
+        .alg = "ES256",
+        .kid = "kids",
+    };
+    const claims = .{
+        .aud = "example.com",
+        .iat = "foo",
+    };
+    const signature = "test-signature";
+
+    const check1 = "eyJ0eXAiOiJKV0UiLCJhbGciOiJFUzI1NiIsImtpZCI6ImtpZHMifQ.eyJhdWQiOiJleGFtcGxlLmNvbSIsImlhdCI6ImZvbyJ9.dGVzdC1zaWduYXR1cmU";
+
+    var token = Token.init(alloc);
+
+    try token.withHeader("{a:b}");
+    try token.withClaims("{c:d}");
+    try token.withSignature("aabbbcc");
+
+    try testing.expectEqualStrings("{a:b}", token.header);
+    try testing.expectEqualStrings("{c:d}", token.claims);
+    try testing.expectEqualStrings("aabbbcc", token.signature);
+
+    try token.withHeader("");
+    try token.withClaims("");
+    try token.withSignature("");
+
+    try testing.expectEqualStrings("", token.header);
+    try testing.expectEqualStrings("", token.claims);
+    try testing.expectEqualStrings("", token.signature);
+
+    try token.setHeader(header);
+    try token.setClaims(claims);
+    try token.withSignature(signature);
+
+    defer token.deinit();
+
+    const res1 = try token.signedString();
+    defer alloc.free(res1);
+    try testing.expectEqualStrings(check1, res1);
+
+    // ================
+
+    var token2 = Token.init(alloc);
+    token2.parse(check1);
+
+    defer token2.deinit();
+
+    const claimsT = struct {
+        aud: []const u8,
+        iat: []const u8,
+    };
+    const claims3 = try token2.getClaimsT(claimsT);
+    defer claims3.deinit();
+    try testing.expectEqualStrings(claims.aud, claims3.value.aud);
+    try testing.expectEqualStrings(claims.iat, claims3.value.iat);
+
+    const headerT = struct {
+        typ: []const u8,
+        alg: []const u8,
+        kid: []const u8,
+    };
+    const header3 = try token2.getHeadersT(headerT);
+    defer header3.deinit();
+    try testing.expectEqualStrings(header.typ, header3.value.typ);
+    try testing.expectEqualStrings(header.alg, header3.value.alg);
+    try testing.expectEqualStrings(header.kid.?, header3.value.kid);
 }
