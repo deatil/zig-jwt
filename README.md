@@ -120,15 +120,15 @@ pub fn main(init: std.process.Init) !void {
 
     // output: 
     // hasBeenIssuedBy: true
-    std.debug.print("hasBeenIssuedBy: {} \n", .{validator.hasBeenIssuedBy("iss")});
+    std.debug.print("hasBeenIssuedBy: {} \n", .{validator.hasBeenIssuedBy(&.{"iss"})});
 
     // const now = std.Io.Timestamp.now(io, .real).toNanoseconds();
 
     // have functions:
-    // validator.hasBeenIssuedBy("iss") // iss
-    // validator.isRelatedTo("sub") // sub
+    // validator.hasBeenIssuedBy(&.{"iss"}) // iss
+    // validator.isRelatedTo(&.{"sub"}) // sub
     // validator.isIdentifiedBy("jti rrr") // jti
-    // validator.isPermittedFor("example.com") // audience
+    // validator.isPermittedFor(&.{"example.com"}) // audience
     // validator.hasBeenIssuedBefore(now) // iat, now is time timestamp
     // validator.isMinimumTimeBefore(now) // nbf, now is time timestamp
     // validator.isExpired(now) // exp, now is time timestamp

@@ -28,13 +28,15 @@ pub const Validator = struct {
         self.leeway = leeway;
     }
 
-    pub fn isPermittedFor(self: *Self, audience: []const u8) bool {
+    pub fn isPermittedFor(self: *Self, audiences: []const []const u8) bool {
         const claims = self.claims;
 
         if (claims.value.object.get("aud")) |val| {
             if (val == .string) {
-                if (utils.eq(audience, val.string)) {
-                    return true;
+                for (audiences) |audience| {
+                    if (utils.eq(audience, val.string)) {
+                        return true;
+                    }
                 }
             }
 
@@ -60,13 +62,15 @@ pub const Validator = struct {
         return false;
     }
 
-    pub fn isRelatedTo(self: *Self, subject: []const u8) bool {
+    pub fn isRelatedTo(self: *Self, subjects: []const []const u8) bool {
         const claims = self.claims;
 
         if (claims.value.object.get("sub")) |val| {
             if (val == .string) {
-                if (utils.eq(subject, val.string)) {
-                    return true;
+                for (subjects) |subject| {
+                    if (utils.eq(subject, val.string)) {
+                        return true;
+                    }
                 }
             }
 
@@ -76,13 +80,15 @@ pub const Validator = struct {
         return false;
     }
 
-    pub fn hasBeenIssuedBy(self: *Self, issuer: []const u8) bool {
+    pub fn hasBeenIssuedBy(self: *Self, issuers: []const []const u8) bool {
         const claims = self.claims;
 
         if (claims.value.object.get("iss")) |val| {
             if (val == .string) {
-                if (utils.eq(issuer, val.string)) {
-                    return true;
+                for (issuers) |issuer| {
+                    if (utils.eq(issuer, val.string)) {
+                        return true;
+                    }
                 }
             }
 
@@ -204,10 +210,10 @@ test "Validator" {
     var validator = try Validator.init(&token);
     defer validator.deinit();
 
-    try testing.expectEqual(true, validator.hasBeenIssuedBy("iss"));
-    try testing.expectEqual(true, validator.isRelatedTo("sub"));
+    try testing.expectEqual(true, validator.hasBeenIssuedBy(&.{"iss"}));
+    try testing.expectEqual(true, validator.isRelatedTo(&.{ "sub1", "sub" }));
     try testing.expectEqual(true, validator.isIdentifiedBy("jti rrr"));
-    try testing.expectEqual(true, validator.isPermittedFor("example.com"));
+    try testing.expectEqual(true, validator.isPermittedFor(&.{"example.com"}));
     try testing.expectEqual(true, validator.hasBeenIssuedBefore(now));
     try testing.expectEqual(false, validator.isExpired(now));
 

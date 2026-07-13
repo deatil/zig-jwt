@@ -90,10 +90,10 @@ test "Token Validator" {
     var validator = try jwt.Validator.init(&token);
     defer validator.deinit();
 
-    try testing.expectEqual(true, validator.hasBeenIssuedBy("iss"));
-    try testing.expectEqual(true, validator.isRelatedTo("sub"));
+    try testing.expectEqual(true, validator.hasBeenIssuedBy(&.{"iss"}));
+    try testing.expectEqual(true, validator.isRelatedTo(&.{"sub"}));
     try testing.expectEqual(true, validator.isIdentifiedBy("jti rrr"));
-    try testing.expectEqual(true, validator.isPermittedFor("example.com"));
+    try testing.expectEqual(true, validator.isPermittedFor(&.{"example.com"}));
     try testing.expectEqual(true, validator.hasBeenIssuedBefore(now));
 
     const claims = try token.getClaims();
