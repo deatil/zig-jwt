@@ -113,7 +113,7 @@ pub fn main(init: std.process.Init) !void {
     var token = jwt.Token.init(alloc);
     token.parse(token_string);
 
-    var validator = try jwt.Validator.init(token);
+    var validator = try jwt.Validator.init(alloc, token);
     defer validator.deinit();
 
     // validator.withLeeway(3);

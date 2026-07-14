@@ -10,19 +10,54 @@ const StringArray = std.array_list.Managed([]const u8);
 
 pub const ClaimsData = struct {
     claims: json.Parsed(json.Value),
+    alloc: Allocator,
 
     const Self = @This();
 
-    pub fn init(token: *Token) !Self {
+    pub fn init(alloc: Allocator, token: *Token) !Self {
         const claims = try token.getClaims();
 
         return .{
             .claims = claims,
+            .alloc = alloc,
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.claims.deinit();
+    }
+
+    pub fn getExpirationTime(self: *Self) ?i64 {
+        return self.getInteger("exp");
+    }
+
+    pub fn getNotBefore(self: *Self) ?i64 {
+        return self.getInteger("nbf");
+    }
+
+    pub fn getIssuedAt(self: *Self) ?i64 {
+        return self.getInteger("iat");
+    }
+
+    pub fn getAudience(self: *Self) ?[]const []const u8 {
+        const aud = self.getStrings("aud") catch &.{};
+        if (aud.len > 0) {
+            return aud;
+        }
+
+        return null;
+    }
+
+    pub fn getIssuer(self: *Self) ?[]const u8 {
+        return self.getString("iss");
+    }
+
+    pub fn getSubject(self: *Self) ?[]const u8 {
+        return self.getString("sub");
+    }
+
+    pub fn getID(self: *Self) ?[]const u8 {
+        return self.getString("jti");
     }
 
     pub fn getBool(self: *Self, name: []const u8) ?bool {
@@ -109,17 +144,21 @@ pub const ClaimsData = struct {
         return null;
     }
 
-    pub fn getStrings(self: *Self, alloc: Allocator, name: []const u8) ![]const []const u8 {
+    pub fn getStrings(self: *Self, name: []const u8) ![]const []const u8 {
         const claims = self.claims;
 
-        var arr = StringArray.init(alloc);
+        var arr = StringArray.init(self.alloc);
         defer arr.deinit();
 
         if (claims.value.object.get(name)) |val| {
             if (val == .string) {
                 try arr.append(val.string);
             } else if (val == .array) {
-                try arr.appendSlice(val.array.items);
+                for (val.array.items) |vv| {
+                    if (vv == .string) {
+                        try arr.append(vv.string);
+                    }
+                }
             }
         }
 
@@ -128,17 +167,19 @@ pub const ClaimsData = struct {
 };
 
 pub const Validator = struct {
-    claims: json.Parsed(json.Value),
+    claims: ClaimsData,
     leeway: i64 = 0,
+    alloc: Allocator,
 
     const Self = @This();
 
-    pub fn init(token: *Token) !Self {
-        const claims = try token.getClaims();
+    pub fn init(alloc: Allocator, token: *Token) !Self {
+        const claims = try ClaimsData.init(alloc, token);
 
         return .{
             .claims = claims,
             .leeway = 0,
+            .alloc = alloc,
         };
     }
 
@@ -151,12 +192,13 @@ pub const Validator = struct {
     }
 
     pub fn isPermittedFor(self: *Self, audiences: []const []const u8) bool {
-        const claims = self.claims;
+        const auds = self.claims.getAudience();
+        defer self.alloc.free(auds.?);
 
-        if (claims.value.object.get("aud")) |val| {
-            if (val == .string) {
+        if (auds) |val| {
+            for (val) |aud| {
                 for (audiences) |audience| {
-                    if (utils.eq(audience, val.string)) {
+                    if (utils.eq(audience, aud)) {
                         return true;
                     }
                 }
@@ -169,13 +211,11 @@ pub const Validator = struct {
     }
 
     pub fn isIdentifiedBy(self: *Self, id: []const u8) bool {
-        const claims = self.claims;
+        const jti = self.claims.getID();
 
-        if (claims.value.object.get("jti")) |val| {
-            if (val == .string) {
-                if (utils.eq(id, val.string)) {
-                    return true;
-                }
+        if (jti) |val| {
+            if (utils.eq(id, val)) {
+                return true;
             }
 
             return false;
@@ -185,14 +225,12 @@ pub const Validator = struct {
     }
 
     pub fn isRelatedTo(self: *Self, subjects: []const []const u8) bool {
-        const claims = self.claims;
+        const sub = self.claims.getSubject();
 
-        if (claims.value.object.get("sub")) |val| {
-            if (val == .string) {
-                for (subjects) |subject| {
-                    if (utils.eq(subject, val.string)) {
-                        return true;
-                    }
+        if (sub) |val| {
+            for (subjects) |subject| {
+                if (utils.eq(subject, val)) {
+                    return true;
                 }
             }
 
@@ -203,14 +241,12 @@ pub const Validator = struct {
     }
 
     pub fn hasBeenIssuedBy(self: *Self, issuers: []const []const u8) bool {
-        const claims = self.claims;
+        const iss = self.claims.getIssuer();
 
-        if (claims.value.object.get("iss")) |val| {
-            if (val == .string) {
-                for (issuers) |issuer| {
-                    if (utils.eq(issuer, val.string)) {
-                        return true;
-                    }
+        if (iss) |val| {
+            for (issuers) |issuer| {
+                if (utils.eq(issuer, val)) {
+                    return true;
                 }
             }
 
@@ -221,13 +257,11 @@ pub const Validator = struct {
     }
 
     pub fn hasBeenIssuedBefore(self: *Self, now: i64) bool {
-        const claims = self.claims;
+        const iat = self.claims.getIssuedAt();
 
-        if (claims.value.object.get("iat")) |val| {
-            if (val == .integer) {
-                if (now + self.leeway >= val.integer) {
-                    return true;
-                }
+        if (iat) |val| {
+            if (now + self.leeway >= val) {
+                return true;
             }
 
             return false;
@@ -237,13 +271,11 @@ pub const Validator = struct {
     }
 
     pub fn isMinimumTimeBefore(self: *Self, now: i64) bool {
-        const claims = self.claims;
+        const nbf = self.claims.getNotBefore();
 
-        if (claims.value.object.get("nbf")) |val| {
-            if (val == .integer) {
-                if (now + self.leeway >= val.integer) {
-                    return true;
-                }
+        if (nbf) |val| {
+            if (now + self.leeway >= val) {
+                return true;
             }
 
             return false;
@@ -253,13 +285,11 @@ pub const Validator = struct {
     }
 
     pub fn isExpired(self: *Self, now: i64) bool {
-        const claims = self.claims;
+        const exp = self.claims.getExpirationTime();
 
-        if (claims.value.object.get("exp")) |val| {
-            if (val == .integer) {
-                if (now - self.leeway < val.integer) {
-                    return false;
-                }
+        if (exp) |val| {
+            if (now - self.leeway < val) {
+                return false;
             }
 
             return true;
@@ -281,7 +311,7 @@ test "Validator isExpired" {
     token.parse(check1);
     defer token.deinit();
 
-    var validator = try Validator.init(&token);
+    var validator = try Validator.init(alloc, &token);
     defer validator.deinit();
 
     const isExpired = validator.isExpired(now);
@@ -307,7 +337,7 @@ test "Validator isMinimumTimeBefore" {
 
     defer token.deinit();
 
-    var validator = try Validator.init(&token);
+    var validator = try Validator.init(alloc, &token);
     defer validator.deinit();
 
     const isMinimumTimeBefore = validator.isMinimumTimeBefore(now);
@@ -329,7 +359,7 @@ test "Validator" {
 
     defer token.deinit();
 
-    var validator = try Validator.init(&token);
+    var validator = try Validator.init(alloc, &token);
     defer validator.deinit();
 
     try testing.expectEqual(true, validator.hasBeenIssuedBy(&.{"iss"}));
@@ -358,7 +388,7 @@ test "Validator" {
 
     defer token2.deinit();
 
-    var validator2 = try Validator.init(&token2);
+    var validator2 = try Validator.init(alloc, &token2);
     defer validator2.deinit();
 
     validator2.withLeeway(3);
@@ -369,4 +399,35 @@ test "Validator" {
     try testing.expectEqual(false, validator2.isMinimumTimeBefore(1567842384));
     try testing.expectEqual(true, validator2.isExpired(1767842392));
     try testing.expectEqual(false, validator2.isExpired(1767842389));
+}
+
+test "ClaimsData" {
+    const alloc = testing.allocator;
+
+    const check1 = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ0ZXN0Iiwic3ViIjoiU3ViamVjdCIsImF1ZCI6WyJhdWQxIiwiYXVkMiJdLCJleHAiOjE1MTYyMzkwMjIsIm5iZiI6MTUxNjIwOTAyMiwiaWF0IjoxNTE2MjA5MDEyLCJqdGkiOiJJRCIsImJvIjp0cnVlLCJmbCI6MTIuMzQ1Nn0.Ik_fqgeKtMp41Utw8QisQ00nk8FbsHEHQGKlhB2C7lc";
+
+    var token = Token.init(alloc);
+    token.parse(check1);
+
+    defer token.deinit();
+
+    var data = try ClaimsData.init(alloc, &token);
+    defer data.deinit();
+
+    try testing.expectFmt("1516239022", "{d}", .{data.getExpirationTime().?});
+    try testing.expectFmt("1516209022", "{d}", .{data.getNotBefore().?});
+    try testing.expectFmt("1516209012", "{d}", .{data.getIssuedAt().?});
+
+    const auds = data.getAudience().?;
+    defer alloc.free(auds);
+
+    try testing.expectFmt("aud1", "{s}", .{auds[0]});
+    try testing.expectFmt("aud2", "{s}", .{auds[1]});
+
+    try testing.expectFmt("test", "{s}", .{data.getIssuer().?});
+    try testing.expectFmt("Subject", "{s}", .{data.getSubject().?});
+    try testing.expectFmt("ID", "{s}", .{data.getID().?});
+
+    try testing.expectEqual(true, data.getBool("bo").?);
+    try testing.expectFmt("12.3456", "{}", .{data.getFloat("fl").?});
 }
