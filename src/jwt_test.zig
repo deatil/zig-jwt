@@ -87,7 +87,7 @@ test "Token Validator" {
 
     defer token.deinit();
 
-    var validator = try jwt.Validator.init(&token);
+    var validator = try jwt.Validator.init(alloc, &token);
     defer validator.deinit();
 
     try testing.expectEqual(true, validator.hasBeenIssuedBy(&.{"iss"}));
