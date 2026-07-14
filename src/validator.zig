@@ -1,9 +1,131 @@
 const std = @import("std");
 const json = std.json;
 const testing = std.testing;
+const Allocator = std.mem.Allocator;
 
 const utils = @import("utils.zig");
 const Token = @import("token.zig").Token;
+
+const StringArray = std.array_list.Managed([]const u8);
+
+pub const ClaimsData = struct {
+    claims: json.Parsed(json.Value),
+
+    const Self = @This();
+
+    pub fn init(token: *Token) !Self {
+        const claims = try token.getClaims();
+
+        return .{
+            .claims = claims,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.claims.deinit();
+    }
+
+    pub fn getBool(self: *Self, name: []const u8) ?bool {
+        const claims = self.claims;
+
+        if (claims.value.object.get(name)) |val| {
+            if (val == .bool) {
+                return val.bool;
+            }
+        }
+
+        return null;
+    }
+
+    pub fn getInteger(self: *Self, name: []const u8) ?i64 {
+        const claims = self.claims;
+
+        if (claims.value.object.get(name)) |val| {
+            if (val == .integer) {
+                return val.integer;
+            }
+        }
+
+        return null;
+    }
+
+    pub fn getFloat(self: *Self, name: []const u8) ?f64 {
+        const claims = self.claims;
+
+        if (claims.value.object.get(name)) |val| {
+            if (val == .float) {
+                return val.float;
+            }
+        }
+
+        return null;
+    }
+
+    pub fn getNumberString(self: *Self, name: []const u8) ?[]const u8 {
+        const claims = self.claims;
+
+        if (claims.value.object.get(name)) |val| {
+            if (val == .number_string) {
+                return val.number_string;
+            }
+        }
+
+        return null;
+    }
+
+    pub fn getString(self: *Self, name: []const u8) ?[]const u8 {
+        const claims = self.claims;
+
+        if (claims.value.object.get(name)) |val| {
+            if (val == .string) {
+                return val.string;
+            }
+        }
+
+        return null;
+    }
+
+    pub fn getArray(self: *Self, name: []const u8) ?json.Array {
+        const claims = self.claims;
+
+        if (claims.value.object.get(name)) |val| {
+            if (val == .array) {
+                return val.array;
+            }
+        }
+
+        return null;
+    }
+
+    pub fn getObject(self: *Self, name: []const u8) ?json.ObjectMap {
+        const claims = self.claims;
+
+        if (claims.value.object.get(name)) |val| {
+            if (val == .object) {
+                return val.object;
+            }
+        }
+
+        return null;
+    }
+
+    pub fn getStrings(self: *Self, alloc: Allocator, name: []const u8) ![]const []const u8 {
+        const claims = self.claims;
+
+        var arr = StringArray.init(alloc);
+        defer arr.deinit();
+
+        if (claims.value.object.get(name)) |val| {
+            if (val == .string) {
+                try arr.append(val.string);
+            } else if (val == .array) {
+                try arr.appendSlice(val.array.items);
+            }
+        }
+
+        return arr.toOwnedSlice();
+    }
+};
 
 pub const Validator = struct {
     claims: json.Parsed(json.Value),
