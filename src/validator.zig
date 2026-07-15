@@ -421,6 +421,7 @@ test "ClaimsData" {
     const auds = data.getAudience().?;
     defer alloc.free(auds);
 
+    try testing.expectEqual(2, auds.len);
     try testing.expectFmt("aud1", "{s}", .{auds[0]});
     try testing.expectFmt("aud2", "{s}", .{auds[1]});
 
@@ -430,4 +431,46 @@ test "ClaimsData" {
 
     try testing.expectEqual(true, data.getBool("bo").?);
     try testing.expectFmt("12.3456", "{}", .{data.getFloat("fl").?});
+}
+
+test "ClaimsData fail" {
+    const alloc = testing.allocator;
+
+    const check1 = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ0ZXN0Iiwic3ViIjoiU3ViamVjdCIsImF1ZCI6ImF1ZDEiLCJleHAiOjE1MTYyMzkwMjIsIm5iZiI6MTUxNjIwOTAyMiwiaWF0IjoxNTE2MjA5MDEyLCJqdGkiOiJJRCIsIm5zIjoxMTExMTExMTkyMjMzNzIwMzY4NTQ3NzYwMDAsIm9iIjp7Im9iZCI6Im9iZC1kYXRhIn0sImFyciI6WyJhcnItZGF0YSJdfQ.Q4TGaqj3xwpwMNpBU4bFHFFcbSyfMkVNn1QtFGIAaZE";
+
+    var token = Token.init(alloc);
+    token.parse(check1);
+
+    defer token.deinit();
+
+    var data = try ClaimsData.init(alloc, &token);
+    defer data.deinit();
+
+    const auds = data.getAudience().?;
+    defer alloc.free(auds);
+
+    try testing.expectEqual(1, auds.len);
+    try testing.expectFmt("aud1", "{s}", .{auds[0]});
+
+    const subs = data.getStrings("sub0") catch &.{};
+    defer alloc.free(subs);
+
+    try testing.expectEqual(0, subs.len);
+
+    try testing.expectEqual(.{null}, .{data.getObject("iss")});
+    try testing.expectEqual(.{null}, .{data.getArray("iss")});
+    try testing.expectEqual(.{null}, .{data.getString("ita")});
+    try testing.expectEqual(.{null}, .{data.getNumberString("ita")});
+    try testing.expectEqual(.{null}, .{data.getFloat("ita")});
+    try testing.expectEqual(.{null}, .{data.getInteger("ita")});
+    try testing.expectEqual(.{null}, .{data.getBool("ita")});
+
+    const ob = data.getObject("ob").?;
+    try testing.expectFmt("obd-data", "{s}", .{ob.get("obd").?.string});
+
+    const arr = data.getArray("arr").?;
+    try testing.expectFmt("arr-data", "{s}", .{arr.items[0].string});
+
+    try testing.expectFmt("111111119223372036854776000", "{s}", .{data.getNumberString("ns").?});
+    try testing.expectFmt("aud1", "{s}", .{data.getString("aud").?});
 }
