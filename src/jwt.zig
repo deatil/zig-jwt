@@ -15,6 +15,7 @@ pub const utils = @import("utils.zig");
 pub const builder = @import("builder.zig");
 
 pub const Token = @import("token.zig").Token;
+pub const ClaimsData = @import("validator.zig").ClaimsData;
 pub const Validator = @import("validator.zig").Validator;
 
 pub const SigningMethodRS256 = JWT(rsa.SigningRS256, crypto_rsa.SecretKey, crypto_rsa.PublicKey);

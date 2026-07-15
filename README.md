@@ -122,7 +122,7 @@ pub fn main(init: std.process.Init) !void {
     // hasBeenIssuedBy: true
     std.debug.print("hasBeenIssuedBy: {} \n", .{validator.hasBeenIssuedBy(&.{"iss"})});
 
-    // const now = std.Io.Timestamp.now(io, .real).toNanoseconds();
+    // const now = std.Io.Timestamp.now(io, .real).toSeconds();
 
     // have functions:
     // validator.hasBeenIssuedBy(&.{"iss"}) // iss
