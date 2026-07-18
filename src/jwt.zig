@@ -11,11 +11,12 @@ pub const eddsa = @import("eddsa.zig");
 pub const hmac = @import("hmac.zig");
 pub const blake2b = @import("blake2b.zig");
 pub const none = @import("none.zig");
-pub const utils = @import("utils.zig");
 pub const builder = @import("builder.zig");
+pub const token = @import("token.zig");
+pub const utils = @import("utils.zig");
 
-pub const Token = @import("token.zig").Token;
-pub const ClaimsData = @import("validator.zig").ClaimsData;
+pub const Token = token.Token;
+pub const ClaimsData = token.ClaimsData;
 pub const Validator = @import("validator.zig").Validator;
 
 pub const SigningMethodRS256 = JWT(rsa.SigningRS256, crypto_rsa.SecretKey, crypto_rsa.PublicKey);
@@ -262,7 +263,7 @@ pub fn getSigningMethod(name: []const u8) !type {
     return Error.JWTSigningMethodNotExists;
 }
 
-pub fn getTokenHeader(alloc: Allocator, token_string: []const u8) !Token.Header {
+pub fn getTokenHeader(alloc: Allocator, token_string: []const u8) !token.Header {
     var t = Token.init(alloc);
     t.parse(token_string);
 

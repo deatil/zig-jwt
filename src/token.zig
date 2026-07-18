@@ -4,6 +4,8 @@ const time = std.time;
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 
+const StringArray = std.array_list.Managed([]const u8);
+
 const utils = @import("utils.zig");
 
 pub const Token = struct {
@@ -15,21 +17,6 @@ pub const Token = struct {
     alloc: Allocator,
 
     const Self = @This();
-
-    pub const Header = struct {
-        typ: []const u8,
-        alg: []const u8,
-        kid: ?[]const u8 = null,
-
-        pub fn deinit(self: *@This(), alloc: Allocator) void {
-            alloc.free(self.typ);
-            alloc.free(self.alg);
-
-            if (self.kid != null) {
-                alloc.free(self.kid.?);
-            }
-        }
-    };
 
     pub fn init(alloc: Allocator) Self {
         return .{
@@ -159,7 +146,7 @@ pub const Token = struct {
         return std.mem.join(self.alloc, ".", &[_][]const u8{ header, claims });
     }
 
-    pub fn getHeader(self: *Self) !Self.Header {
+    pub fn getHeader(self: *Self) !Header {
         const parsed_header = try utils.jsonDecode(self.alloc, self.header);
         defer parsed_header.deinit();
 
@@ -201,6 +188,10 @@ pub const Token = struct {
         return utils.jsonDecodeT(T, self.alloc, self.header);
     }
 
+    pub fn getClaim(self: *Self) !ClaimsData {
+        return ClaimsData.init(self.alloc, self);
+    }
+
     pub fn getClaims(self: *Self) !json.Parsed(json.Value) {
         return utils.jsonDecode(self.alloc, self.claims);
     }
@@ -214,10 +205,189 @@ pub const Token = struct {
     }
 };
 
+pub const Header = struct {
+    typ: []const u8,
+    alg: []const u8,
+    kid: ?[]const u8 = null,
+
+    const Self = @This();
+
+    pub fn deinit(self: *Self, alloc: Allocator) void {
+        alloc.free(self.typ);
+        alloc.free(self.alg);
+
+        if (self.kid != null) {
+            alloc.free(self.kid.?);
+        }
+    }
+};
+
+pub const ClaimsData = struct {
+    claims: json.Parsed(json.Value),
+    alloc: Allocator,
+
+    const Self = @This();
+
+    pub fn init(alloc: Allocator, token: *Token) !Self {
+        const claims = try token.getClaims();
+
+        return .{
+            .claims = claims,
+            .alloc = alloc,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.claims.deinit();
+    }
+
+    pub fn getExpirationTime(self: *Self) ?i64 {
+        return self.getInteger("exp");
+    }
+
+    pub fn getNotBefore(self: *Self) ?i64 {
+        return self.getInteger("nbf");
+    }
+
+    pub fn getIssuedAt(self: *Self) ?i64 {
+        return self.getInteger("iat");
+    }
+
+    pub fn getAudience(self: *Self) ?[]const []const u8 {
+        return self.getStrings("aud");
+    }
+
+    pub fn getIssuer(self: *Self) ?[]const u8 {
+        return self.getString("iss");
+    }
+
+    pub fn getSubject(self: *Self) ?[]const u8 {
+        return self.getString("sub");
+    }
+
+    pub fn getID(self: *Self) ?[]const u8 {
+        return self.getString("jti");
+    }
+
+    pub fn getBool(self: *Self, name: []const u8) ?bool {
+        const claims = self.claims;
+
+        if (claims.value.object.get(name)) |val| {
+            if (val == .bool) {
+                return val.bool;
+            }
+        }
+
+        return null;
+    }
+
+    pub fn getInteger(self: *Self, name: []const u8) ?i64 {
+        const claims = self.claims;
+
+        if (claims.value.object.get(name)) |val| {
+            if (val == .integer) {
+                return val.integer;
+            }
+        }
+
+        return null;
+    }
+
+    pub fn getFloat(self: *Self, name: []const u8) ?f64 {
+        const claims = self.claims;
+
+        if (claims.value.object.get(name)) |val| {
+            if (val == .float) {
+                return val.float;
+            }
+        }
+
+        return null;
+    }
+
+    pub fn getNumberString(self: *Self, name: []const u8) ?[]const u8 {
+        const claims = self.claims;
+
+        if (claims.value.object.get(name)) |val| {
+            if (val == .number_string) {
+                return val.number_string;
+            }
+        }
+
+        return null;
+    }
+
+    pub fn getString(self: *Self, name: []const u8) ?[]const u8 {
+        const claims = self.claims;
+
+        if (claims.value.object.get(name)) |val| {
+            if (val == .string) {
+                return val.string;
+            }
+        }
+
+        return null;
+    }
+
+    pub fn getArray(self: *Self, name: []const u8) ?json.Array {
+        const claims = self.claims;
+
+        if (claims.value.object.get(name)) |val| {
+            if (val == .array) {
+                return val.array;
+            }
+        }
+
+        return null;
+    }
+
+    pub fn getObject(self: *Self, name: []const u8) ?json.ObjectMap {
+        const claims = self.claims;
+
+        if (claims.value.object.get(name)) |val| {
+            if (val == .object) {
+                return val.object;
+            }
+        }
+
+        return null;
+    }
+
+    pub fn getStrings(self: *Self, name: []const u8) ?[]const []const u8 {
+        const aud = self.getMustStrings(name) catch &.{};
+        if (aud.len > 0) {
+            return aud;
+        }
+
+        return null;
+    }
+
+    pub fn getMustStrings(self: *Self, name: []const u8) ![]const []const u8 {
+        const claims = self.claims;
+
+        var arr = StringArray.init(self.alloc);
+        defer arr.deinit();
+
+        if (claims.value.object.get(name)) |val| {
+            if (val == .string) {
+                try arr.append(val.string);
+            } else if (val == .array) {
+                for (val.array.items) |vv| {
+                    if (vv == .string) {
+                        try arr.append(vv.string);
+                    }
+                }
+            }
+        }
+
+        return arr.toOwnedSlice();
+    }
+};
+
 test "Token" {
     const alloc = testing.allocator;
 
-    const header: Token.Header = .{
+    const header: Header = .{
         .typ = "JWT",
         .alg = "ES256",
     };
@@ -338,7 +508,7 @@ test "Token" {
 test "Token 2" {
     const alloc = testing.allocator;
 
-    const header: Token.Header = .{
+    const header: Header = .{
         .typ = "JWE",
         .alg = "ES256",
     };
@@ -378,7 +548,7 @@ test "Token 2" {
 test "Token 3" {
     const alloc = testing.allocator;
 
-    const header: Token.Header = .{
+    const header: Header = .{
         .typ = "JWE",
         .alg = "ES256",
         .kid = "kids",
@@ -445,7 +615,7 @@ test "Token 3" {
 test "Token with check" {
     const alloc = testing.allocator;
 
-    const header: Token.Header = .{
+    const header: Header = .{
         .typ = "JWE",
         .alg = "ES256",
         .kid = "kids",
@@ -512,4 +682,79 @@ test "Token with check" {
     try testing.expectEqualStrings(header.typ, header3.value.typ);
     try testing.expectEqualStrings(header.alg, header3.value.alg);
     try testing.expectEqualStrings(header.kid.?, header3.value.kid);
+}
+
+test "ClaimsData" {
+    const alloc = testing.allocator;
+
+    const check1 = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ0ZXN0Iiwic3ViIjoiU3ViamVjdCIsImF1ZCI6WyJhdWQxIiwiYXVkMiJdLCJleHAiOjE1MTYyMzkwMjIsIm5iZiI6MTUxNjIwOTAyMiwiaWF0IjoxNTE2MjA5MDEyLCJqdGkiOiJJRCIsImJvIjp0cnVlLCJmbCI6MTIuMzQ1Nn0.Ik_fqgeKtMp41Utw8QisQ00nk8FbsHEHQGKlhB2C7lc";
+
+    var token = Token.init(alloc);
+    token.parse(check1);
+
+    defer token.deinit();
+
+    var data = try ClaimsData.init(alloc, &token);
+    defer data.deinit();
+
+    try testing.expectFmt("1516239022", "{d}", .{data.getExpirationTime().?});
+    try testing.expectFmt("1516209022", "{d}", .{data.getNotBefore().?});
+    try testing.expectFmt("1516209012", "{d}", .{data.getIssuedAt().?});
+
+    const auds = data.getAudience().?;
+    defer alloc.free(auds);
+
+    try testing.expectEqual(2, auds.len);
+    try testing.expectFmt("aud1", "{s}", .{auds[0]});
+    try testing.expectFmt("aud2", "{s}", .{auds[1]});
+
+    try testing.expectFmt("test", "{s}", .{data.getIssuer().?});
+    try testing.expectFmt("Subject", "{s}", .{data.getSubject().?});
+    try testing.expectFmt("ID", "{s}", .{data.getID().?});
+
+    try testing.expectEqual(true, data.getBool("bo").?);
+    try testing.expectFmt("12.3456", "{}", .{data.getFloat("fl").?});
+}
+
+test "ClaimsData fail" {
+    const alloc = testing.allocator;
+
+    const check1 = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ0ZXN0Iiwic3ViIjoiU3ViamVjdCIsImF1ZCI6ImF1ZDEiLCJleHAiOjE1MTYyMzkwMjIsIm5iZiI6MTUxNjIwOTAyMiwiaWF0IjoxNTE2MjA5MDEyLCJqdGkiOiJJRCIsIm5zIjoxMTExMTExMTkyMjMzNzIwMzY4NTQ3NzYwMDAsIm9iIjp7Im9iZCI6Im9iZC1kYXRhIn0sImFyciI6WyJhcnItZGF0YSJdfQ.Q4TGaqj3xwpwMNpBU4bFHFFcbSyfMkVNn1QtFGIAaZE";
+
+    var token = Token.init(alloc);
+    token.parse(check1);
+
+    defer token.deinit();
+
+    var data = try ClaimsData.init(alloc, &token);
+    defer data.deinit();
+
+    const auds = data.getAudience().?;
+    defer alloc.free(auds);
+
+    try testing.expectEqual(1, auds.len);
+    try testing.expectFmt("aud1", "{s}", .{auds[0]});
+
+    const subs = data.getMustStrings("sub0") catch &.{};
+    defer alloc.free(subs);
+
+    try testing.expectEqual(0, subs.len);
+
+    try testing.expectEqual(.{null}, .{data.getObject("iss")});
+    try testing.expectEqual(.{null}, .{data.getArray("iss")});
+    try testing.expectEqual(.{null}, .{data.getString("ita")});
+    try testing.expectEqual(.{null}, .{data.getStrings("sub0")});
+    try testing.expectEqual(.{null}, .{data.getNumberString("ita")});
+    try testing.expectEqual(.{null}, .{data.getFloat("ita")});
+    try testing.expectEqual(.{null}, .{data.getInteger("ita")});
+    try testing.expectEqual(.{null}, .{data.getBool("ita")});
+
+    const ob = data.getObject("ob").?;
+    try testing.expectFmt("obd-data", "{s}", .{ob.get("obd").?.string});
+
+    const arr = data.getArray("arr").?;
+    try testing.expectFmt("arr-data", "{s}", .{arr.items[0].string});
+
+    try testing.expectFmt("111111119223372036854776000", "{s}", .{data.getNumberString("ns").?});
+    try testing.expectFmt("aud1", "{s}", .{data.getString("aud").?});
 }
