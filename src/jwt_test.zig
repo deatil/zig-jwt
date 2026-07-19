@@ -881,8 +881,8 @@ test "getTokenHeader" {
     const token_str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.feG39E-bn8HXAKhzDZq7yEAPWYDhZlwTn3sePJnU9VrGMmwdXAIEyoOnrjreYlVM_Z4N13eK9-TmMTWyfKJtHQ";
 
     var header = try jwt.getTokenHeader(alloc, token_str);
-    defer header.deinit(alloc);
-    try testing.expectEqualStrings("ES256", header.alg);
+    defer header.deinit();
+    try testing.expectEqualStrings("ES256", header.getAlgorithm().?);
 }
 
 test "SigningMethodES256 with JWTClaims" {
@@ -1441,9 +1441,9 @@ test "SigningMethodEdDSA type" {
     try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 
     var headers2 = try parsed.getHeader();
-    defer headers2.deinit(alloc);
-    try testing.expectEqualStrings("", headers2.typ);
-    try testing.expectEqualStrings(headers.alg, headers2.alg);
+    defer headers2.deinit();
+    try testing.expectEqualStrings("", headers2.getType() orelse "");
+    try testing.expectEqualStrings(headers.alg, headers2.getAlgorithm().?);
 }
 
 test "SigningMethodEdDSA JWTTokenInvalid" {

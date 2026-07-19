@@ -146,38 +146,8 @@ pub const Token = struct {
         return std.mem.join(self.alloc, ".", &[_][]const u8{ header, claims });
     }
 
-    pub fn getHeader(self: *Self) !Header {
-        const parsed_header = try utils.jsonDecode(self.alloc, self.header);
-        defer parsed_header.deinit();
-
-        const hv = parsed_header.value;
-
-        var typ: []const u8 = "";
-        if (hv.object.get("typ")) |val| {
-            if (val == .string) {
-                typ = try self.alloc.dupe(u8, val.string);
-            }
-        }
-
-        var alg: []const u8 = "";
-        if (hv.object.get("alg")) |val| {
-            if (val == .string) {
-                alg = try self.alloc.dupe(u8, val.string);
-            }
-        }
-
-        var kid: []const u8 = "";
-        if (hv.object.get("kid")) |val| {
-            if (val == .string) {
-                kid = try self.alloc.dupe(u8, val.string);
-            }
-        }
-
-        return .{
-            .typ = typ,
-            .alg = alg,
-            .kid = kid,
-        };
+    pub fn getHeader(self: *Self) !HeadersData {
+        return HeadersData.init(self);
     }
 
     pub fn getHeaders(self: *Self) !json.Parsed(json.Value) {
@@ -205,20 +175,49 @@ pub const Token = struct {
     }
 };
 
-pub const Header = struct {
-    typ: []const u8,
-    alg: []const u8,
-    kid: ?[]const u8 = null,
+pub const HeadersData = struct {
+    headers: json.Parsed(json.Value),
 
     const Self = @This();
 
-    pub fn deinit(self: *Self, alloc: Allocator) void {
-        alloc.free(self.typ);
-        alloc.free(self.alg);
+    pub fn init(token: *Token) !Self {
+        const headers = try token.getHeaders();
 
-        if (self.kid != null) {
-            alloc.free(self.kid.?);
+        return .{
+            .headers = headers,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.headers.deinit();
+    }
+
+    pub fn getType(self: *Self) ?[]const u8 {
+        return self.getString("typ");
+    }
+
+    pub fn getAlgorithm(self: *Self) ?[]const u8 {
+        return self.getString("alg");
+    }
+
+    pub fn getKeyID(self: *Self) ?[]const u8 {
+        return self.getString("kid");
+    }
+
+    pub fn getContentType(self: *Self) ?[]const u8 {
+        return self.getString("cty");
+    }
+
+    pub fn getString(self: *Self, name: []const u8) ?[]const u8 {
+        const headers = self.headers;
+
+        if (headers.value.object.get(name)) |val| {
+            if (val == .string) {
+                return val.string;
+            }
         }
+
+        return null;
     }
 };
 
@@ -387,7 +386,7 @@ pub const ClaimsData = struct {
 test "Token" {
     const alloc = testing.allocator;
 
-    const header: Header = .{
+    const header = .{
         .typ = "JWT",
         .alg = "ES256",
     };
@@ -436,9 +435,9 @@ test "Token" {
     defer token2.deinit();
 
     var header2 = try token2.getHeader();
-    defer header2.deinit(alloc);
-    try testing.expectEqualStrings("JWT", header2.typ);
-    try testing.expectEqualStrings("ES256", header2.alg);
+    defer header2.deinit();
+    try testing.expectEqualStrings("JWT", header2.getType().?);
+    try testing.expectEqualStrings("ES256", header2.getAlgorithm().?);
 
     const claims2 = try token2.getClaims();
     defer claims2.deinit();
@@ -460,9 +459,9 @@ test "Token" {
     defer token3.deinit();
 
     var header3 = try token3.getHeader();
-    defer header3.deinit(alloc);
-    try testing.expectEqualStrings("JWT", header3.typ);
-    try testing.expectEqualStrings("ES256", header3.alg);
+    defer header3.deinit();
+    try testing.expectEqualStrings("JWT", header3.getType().?);
+    try testing.expectEqualStrings("ES256", header3.getAlgorithm().?);
 
     const claims3 = try token3.getClaims();
     defer claims3.deinit();
@@ -508,7 +507,7 @@ test "Token" {
 test "Token 2" {
     const alloc = testing.allocator;
 
-    const header: Header = .{
+    const header = .{
         .typ = "JWE",
         .alg = "ES256",
     };
@@ -548,7 +547,7 @@ test "Token 2" {
 test "Token 3" {
     const alloc = testing.allocator;
 
-    const header: Header = .{
+    const header = .{
         .typ = "JWE",
         .alg = "ES256",
         .kid = "kids",
@@ -580,8 +579,8 @@ test "Token 3" {
     defer token2.deinit();
 
     var header2 = try token2.getHeader();
-    defer header2.deinit(alloc);
-    try testing.expectEqualStrings(header.kid.?, header2.kid.?);
+    defer header2.deinit();
+    try testing.expectEqualStrings(header.kid, header2.getKeyID().?);
 
     // ================
 
@@ -603,19 +602,19 @@ test "Token 3" {
     defer header3.deinit();
     try testing.expectEqualStrings(header.typ, header3.value.typ);
     try testing.expectEqualStrings(header.alg, header3.value.alg);
-    try testing.expectEqualStrings(header.kid.?, header3.value.kid);
+    try testing.expectEqualStrings(header.kid, header3.value.kid);
 
     const header33 = try token2.getHeaders();
     defer header33.deinit();
     try testing.expectEqualStrings(header.typ, header33.value.object.get("typ").?.string);
     try testing.expectEqualStrings(header.alg, header33.value.object.get("alg").?.string);
-    try testing.expectEqualStrings(header.kid.?, header33.value.object.get("kid").?.string);
+    try testing.expectEqualStrings(header.kid, header33.value.object.get("kid").?.string);
 }
 
 test "Token with check" {
     const alloc = testing.allocator;
 
-    const header: Header = .{
+    const header = .{
         .typ = "JWE",
         .alg = "ES256",
         .kid = "kids",
@@ -681,10 +680,10 @@ test "Token with check" {
     defer header3.deinit();
     try testing.expectEqualStrings(header.typ, header3.value.typ);
     try testing.expectEqualStrings(header.alg, header3.value.alg);
-    try testing.expectEqualStrings(header.kid.?, header3.value.kid);
+    try testing.expectEqualStrings(header.kid, header3.value.kid);
 }
 
-test "ClaimsData" {
+test "Token ClaimsData" {
     const alloc = testing.allocator;
 
     const check1 = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ0ZXN0Iiwic3ViIjoiU3ViamVjdCIsImF1ZCI6WyJhdWQxIiwiYXVkMiJdLCJleHAiOjE1MTYyMzkwMjIsIm5iZiI6MTUxNjIwOTAyMiwiaWF0IjoxNTE2MjA5MDEyLCJqdGkiOiJJRCIsImJvIjp0cnVlLCJmbCI6MTIuMzQ1Nn0.Ik_fqgeKtMp41Utw8QisQ00nk8FbsHEHQGKlhB2C7lc";
@@ -716,7 +715,7 @@ test "ClaimsData" {
     try testing.expectFmt("12.3456", "{}", .{data.getFloat("fl").?});
 }
 
-test "ClaimsData fail" {
+test "Token ClaimsData fail" {
     const alloc = testing.allocator;
 
     const check1 = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ0ZXN0Iiwic3ViIjoiU3ViamVjdCIsImF1ZCI6ImF1ZDEiLCJleHAiOjE1MTYyMzkwMjIsIm5iZiI6MTUxNjIwOTAyMiwiaWF0IjoxNTE2MjA5MDEyLCJqdGkiOiJJRCIsIm5zIjoxMTExMTExMTkyMjMzNzIwMzY4NTQ3NzYwMDAsIm9iIjp7Im9iZCI6Im9iZC1kYXRhIn0sImFyciI6WyJhcnItZGF0YSJdfQ.Q4TGaqj3xwpwMNpBU4bFHFFcbSyfMkVNn1QtFGIAaZE";
@@ -757,4 +756,49 @@ test "ClaimsData fail" {
 
     try testing.expectFmt("111111119223372036854776000", "{s}", .{data.getNumberString("ns").?});
     try testing.expectFmt("aud1", "{s}", .{data.getString("aud").?});
+}
+
+test "Token HeadersData" {
+    const alloc = testing.allocator;
+
+    const header = .{
+        .typ = "JWE",
+        .alg = "ES256",
+        .kid = "kids",
+        .cty = "ctysss",
+        .str = "str22",
+        .nstr = 123456,
+    };
+    const claims = .{
+        .aud = "example.com",
+        .iat = "foo",
+    };
+    const signature = "test-signature";
+
+    var token = Token.init(alloc);
+    try token.setHeader(header);
+    try token.setClaims(claims);
+    try token.withSignature(signature);
+
+    defer token.deinit();
+
+    const res = try token.signedString();
+    defer alloc.free(res);
+
+    var token2 = Token.init(alloc);
+    token2.parse(res);
+
+    defer token2.deinit();
+
+    var header2 = try token2.getHeader();
+    defer header2.deinit();
+
+    try testing.expectEqualStrings(header.typ, header2.getType().?);
+    try testing.expectEqualStrings(header.alg, header2.getAlgorithm().?);
+    try testing.expectEqualStrings(header.kid, header2.getKeyID().?);
+    try testing.expectEqualStrings(header.cty, header2.getContentType().?);
+    try testing.expectEqualStrings(header.str, header2.getString("str").?);
+
+    try testing.expectEqual(.{null}, .{header2.getString("strfs")});
+    try testing.expectEqual(.{null}, .{header2.getString("nstr")});
 }

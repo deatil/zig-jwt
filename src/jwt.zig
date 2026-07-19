@@ -16,6 +16,7 @@ pub const token = @import("token.zig");
 pub const utils = @import("utils.zig");
 
 pub const Token = token.Token;
+pub const HeadersData = token.HeadersData;
 pub const ClaimsData = token.ClaimsData;
 pub const Validator = @import("validator.zig").Validator;
 
@@ -46,6 +47,16 @@ pub const SigningMethodHS512 = JWT(hmac.SigningHS512, []const u8, []const u8);
 pub const SigningMethodBLAKE2B = JWT(blake2b.SigningBLAKE2B, []const u8, []const u8);
 
 pub const SigningMethodNone = JWT(none.SigningNone, []const u8, []const u8);
+
+// jwt headers struct
+pub const JWTHeaders = struct {
+    // type
+    typ: ?[]const u8 = null,
+    // algo
+    alg: ?[]const u8 = null,
+    // key id
+    kid: ?[]const u8 = null,
+};
 
 // jwt claims struct
 pub const JWTClaims = struct {
@@ -138,15 +149,17 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
             }
 
             var header = try t.getHeader();
-            defer header.deinit(self.alloc);
+            defer header.deinit();
 
-            if (header.typ.len > 0 and !utils.eq(header.typ, "JWT")) {
+            const typ = header.getType();
+            if (typ != null and !utils.eq(typ.?, "JWT")) {
                 defer t.deinit();
 
                 return Error.JWTTypeInvalid;
             }
 
-            if (!utils.eq(header.alg, self.signer.alg())) {
+            const algo = header.getAlgorithm();
+            if (!utils.eq(algo.?, self.signer.alg())) {
                 defer t.deinit();
 
                 return Error.JWTAlgoInvalid;
@@ -263,7 +276,7 @@ pub fn getSigningMethod(name: []const u8) !type {
     return Error.JWTSigningMethodNotExists;
 }
 
-pub fn getTokenHeader(alloc: Allocator, token_string: []const u8) !token.Header {
+pub fn getTokenHeader(alloc: Allocator, token_string: []const u8) !HeadersData {
     var t = Token.init(alloc);
     t.parse(token_string);
 
