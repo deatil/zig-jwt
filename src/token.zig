@@ -158,6 +158,10 @@ pub const Token = struct {
         return utils.jsonDecodeT(T, self.alloc, self.header);
     }
 
+    pub fn getHeaderRaw(self: *Self) ![]const u8 {
+        return self.alloc.dupe(u8, self.header);
+    }
+
     pub fn getClaim(self: *Self) !ClaimsData {
         return ClaimsData.init(self.alloc, self);
     }
@@ -168,6 +172,10 @@ pub const Token = struct {
 
     pub fn getClaimsT(self: *Self, comptime T: type) !json.Parsed(T) {
         return utils.jsonDecodeT(T, self.alloc, self.claims);
+    }
+
+    pub fn getClaimsRaw(self: *Self) ![]const u8 {
+        return self.alloc.dupe(u8, self.claims);
     }
 
     pub fn getSignature(self: *Self) ![]const u8 {
@@ -581,6 +589,22 @@ test "Token 3" {
     var header2 = try token2.getHeader();
     defer header2.deinit();
     try testing.expectEqualStrings(header.kid, header2.getKeyID().?);
+
+    // ================
+
+    const headerRaw = try token2.getHeaderRaw();
+    defer alloc.free(headerRaw);
+    const headerRawCheck =
+        \\{"typ":"JWE","alg":"ES256","kid":"kids"}
+    ;
+    try testing.expectEqualStrings(headerRawCheck, headerRaw);
+
+    const claimsRaw = try token2.getClaimsRaw();
+    defer alloc.free(claimsRaw);
+    const claimsRawCheck =
+        \\{"aud":"example.com","iat":"foo"}
+    ;
+    try testing.expectEqualStrings(claimsRawCheck, claimsRaw);
 
     // ================
 
