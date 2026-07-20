@@ -1550,3 +1550,8 @@ test "SigningMethodEdDSA with function" {
     try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
     try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
+
+test "Registered std" {
+    try testing.expectEqualStrings("typ", jwt.RegisteredStdHeaders.Type);
+    try testing.expectEqualStrings("aud", jwt.RegisteredStdClaims.Audience);
+}

@@ -3,30 +3,14 @@ const fmt = std.fmt;
 const json = std.json;
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
-
 const Writer = std.Io.Writer;
 const Allocating = std.Io.Writer.Allocating;
 
 const eddsa = @import("eddsa.zig");
 const Token = @import("token.zig").Token;
-
-// Defines the list of headers that are registered in the IANA "JSON Web Token Headers" registry
-pub const RegisteredHeaders = struct {
-    pub const Type = "typ";
-    pub const Algorithm = "alg";
-    pub const Encryption = "enc";
-};
-
-// Defines the list of claims that are registered in the IANA "JSON Web Token Claims" registry
-pub const RegisteredClaims = struct {
-    pub const Audience = "aud";
-    pub const ExpirationTime = "exp";
-    pub const ID = "jti";
-    pub const IssuedAt = "iat";
-    pub const Issuer = "iss";
-    pub const NotBefore = "nbf";
-    pub const Subject = "sub";
-};
+const registered = @import("registered.zig");
+const RegisteredStdHeaders = registered.RegisteredStdHeaders;
+const RegisteredStdClaims = registered.RegisteredStdClaims;
 
 pub fn Builder(comptime Signer: type, comptime SecretKeyType: type) type {
     return struct {
@@ -129,11 +113,11 @@ pub const HeadersData = struct {
     }
 
     pub fn typeBy(self: *Self, typ: []const u8) !void {
-        try self.setData(RegisteredHeaders.Type, typ);
+        try self.setData(RegisteredStdHeaders.Type, typ);
     }
 
     pub fn algoBy(self: *Self, alg: []const u8) !void {
-        try self.setData(RegisteredHeaders.Algorithm, alg);
+        try self.setData(RegisteredStdHeaders.Algorithm, alg);
     }
 };
 
@@ -165,31 +149,31 @@ pub const ClaimsData = struct {
     }
 
     pub fn permittedFor(self: *Self, audience: []const u8) !void {
-        try self.setData(RegisteredClaims.Audience, audience);
+        try self.setData(RegisteredStdClaims.Audience, audience);
     }
 
     pub fn expiresAt(self: *Self, expiration: i64) !void {
-        try self.setData(RegisteredClaims.ExpirationTime, expiration);
+        try self.setData(RegisteredStdClaims.ExpirationTime, expiration);
     }
 
     pub fn identifiedBy(self: *Self, id: []const u8) !void {
-        try self.setData(RegisteredClaims.ID, id);
+        try self.setData(RegisteredStdClaims.ID, id);
     }
 
     pub fn issuedAt(self: *Self, issued_at: i64) !void {
-        try self.setData(RegisteredClaims.IssuedAt, issued_at);
+        try self.setData(RegisteredStdClaims.IssuedAt, issued_at);
     }
 
     pub fn issuedBy(self: *Self, issuer: []const u8) !void {
-        try self.setData(RegisteredClaims.Issuer, issuer);
+        try self.setData(RegisteredStdClaims.Issuer, issuer);
     }
 
     pub fn canOnlyBeUsedAfter(self: *Self, not_before: i64) !void {
-        try self.setData(RegisteredClaims.NotBefore, not_before);
+        try self.setData(RegisteredStdClaims.NotBefore, not_before);
     }
 
     pub fn relatedTo(self: *Self, subject: []const u8) !void {
-        try self.setData(RegisteredClaims.Subject, subject);
+        try self.setData(RegisteredStdClaims.Subject, subject);
     }
 };
 
@@ -410,18 +394,4 @@ test "Builder 3" {
         \\{"typ":"JWT","alg":"EdDSA"}
     ;
     try testing.expectEqualStrings(check3, t.header);
-}
-
-test "Registered" {
-    try testing.expectEqualStrings("typ", RegisteredHeaders.Type);
-    try testing.expectEqualStrings("alg", RegisteredHeaders.Algorithm);
-    try testing.expectEqualStrings("enc", RegisteredHeaders.Encryption);
-
-    try testing.expectEqualStrings("aud", RegisteredClaims.Audience);
-    try testing.expectEqualStrings("exp", RegisteredClaims.ExpirationTime);
-    try testing.expectEqualStrings("jti", RegisteredClaims.ID);
-    try testing.expectEqualStrings("iat", RegisteredClaims.IssuedAt);
-    try testing.expectEqualStrings("iss", RegisteredClaims.Issuer);
-    try testing.expectEqualStrings("nbf", RegisteredClaims.NotBefore);
-    try testing.expectEqualStrings("sub", RegisteredClaims.Subject);
 }

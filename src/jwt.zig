@@ -14,11 +14,14 @@ pub const none = @import("none.zig");
 pub const builder = @import("builder.zig");
 pub const token = @import("token.zig");
 pub const utils = @import("utils.zig");
+pub const registered = @import("registered.zig");
 
 pub const Token = token.Token;
 pub const HeadersData = token.HeadersData;
 pub const ClaimsData = token.ClaimsData;
 pub const Validator = @import("validator.zig").Validator;
+pub const RegisteredStdHeaders = registered.RegisteredStdHeaders;
+pub const RegisteredStdClaims = registered.RegisteredStdClaims;
 
 pub const SigningMethodRS256 = JWT(rsa.SigningRS256, crypto_rsa.SecretKey, crypto_rsa.PublicKey);
 pub const SigningMethodRS384 = JWT(rsa.SigningRS384, crypto_rsa.SecretKey, crypto_rsa.PublicKey);
