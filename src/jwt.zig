@@ -59,6 +59,8 @@ pub const JWTHeaders = struct {
     alg: ?[]const u8 = null,
     // key id
     kid: ?[]const u8 = null,
+    // Content Type
+    cty: ?[]const u8 = null,
 };
 
 // jwt claims struct

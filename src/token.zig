@@ -772,6 +772,15 @@ test "Token ClaimsData fail" {
     try testing.expectEqual(.{null}, .{data.getInteger("ita")});
     try testing.expectEqual(.{null}, .{data.getBool("ita")});
 
+    try testing.expectEqual(.{null}, .{data.getObject("sub")});
+    try testing.expectEqual(.{null}, .{data.getArray("sub")});
+    try testing.expectEqual(.{null}, .{data.getString("iat")});
+    try testing.expectEqual(.{null}, .{data.getStrings("iat")});
+    try testing.expectEqual(.{null}, .{data.getNumberString("sub")});
+    try testing.expectEqual(.{null}, .{data.getFloat("sub")});
+    try testing.expectEqual(.{null}, .{data.getInteger("sub")});
+    try testing.expectEqual(.{null}, .{data.getBool("sub")});
+
     const ob = data.getObject("ob").?;
     try testing.expectFmt("obd-data", "{s}", .{ob.get("obd").?.string});
 

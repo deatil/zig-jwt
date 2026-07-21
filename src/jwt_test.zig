@@ -1555,3 +1555,57 @@ test "Registered std" {
     try testing.expectEqualStrings("typ", jwt.RegisteredStdHeaders.Type);
     try testing.expectEqualStrings("aud", jwt.RegisteredStdClaims.Audience);
 }
+
+test "SigningMethodHS256 with JWTHeaders and JWTClaims" {
+    const alloc = testing.allocator;
+
+    const key = "0323354b2b0fa5bc837e0665777ba68f5ab328e6f054c928a90f84b2d2502ebfd3fb5a92d20647ef968ab4c377623d223d2e2172052e4f08c0cd9af567d080a3";
+
+    var key_buf: [key.len]u8 = undefined;
+    const key_bytes = try fmt.hexToBytes(&key_buf, key);
+
+    const headers: jwt.JWTHeaders = .{
+        .typ = "JWT",
+        .alg = "HS256",
+        .kid = "kidstr",
+        .cty = "utf8",
+    };
+
+    const claims: jwt.JWTClaims = .{
+        .iss = "joe",
+        .iat = 1300819380,
+        .exp = 1350819380,
+        .aud = "aud str",
+        .sub = "sub str",
+        .jti = "idid55",
+        .nbf = 1300819385,
+    };
+
+    const s = jwt.SigningMethodHS256.init(alloc);
+    const token_string = try s.signWithHeader(headers, claims, key_bytes);
+    defer alloc.free(token_string);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = jwt.SigningMethodHS256.init(alloc);
+    var parsed = try p.parse(token_string, key_bytes);
+    defer parsed.deinit();
+
+    const headers2 = try parsed.getHeadersT(jwt.JWTHeaders);
+    defer headers2.deinit();
+    try testing.expectEqualStrings(headers.typ.?, headers2.value.typ.?);
+    try testing.expectEqualStrings(headers.alg.?, headers2.value.alg.?);
+    try testing.expectEqualStrings(headers.kid.?, headers2.value.kid.?);
+    try testing.expectEqualStrings(headers.cty.?, headers2.value.cty.?);
+
+    const claims2 = try parsed.getClaimsT(jwt.JWTClaims);
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.iss.?, claims2.value.iss.?);
+    try testing.expectEqual(claims.iat.?, claims2.value.iat.?);
+    try testing.expectEqual(claims.exp.?, claims2.value.exp.?);
+    try testing.expectEqualStrings(claims.aud.?, claims2.value.aud.?);
+    try testing.expectEqualStrings(claims.sub.?, claims2.value.sub.?);
+    try testing.expectEqualStrings(claims.jti.?, claims2.value.jti.?);
+    try testing.expectEqual(claims.nbf.?, claims2.value.nbf.?);
+}
