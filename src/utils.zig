@@ -46,7 +46,9 @@ pub fn base64UrlDecode(alloc: Allocator, input: []const u8) ![]const u8 {
 }
 
 pub fn jsonEncode(alloc: Allocator, value: anytype) ![]const u8 {
-    const out = try json.Stringify.valueAlloc(alloc, value, .{ .emit_null_optional_fields = false });
+    const out = try json.Stringify.valueAlloc(alloc, value, .{
+        .emit_null_optional_fields = false,
+    });
 
     return out;
 }

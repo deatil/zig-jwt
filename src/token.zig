@@ -25,6 +25,10 @@ pub const Token = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        self.reset();
+    }
+
+    pub fn reset(self: *Self) void {
         self.alloc.free(self.raw);
         self.alloc.free(self.msg);
         self.alloc.free(self.header);
@@ -91,13 +95,13 @@ pub const Token = struct {
     }
 
     pub fn parse(self: *Self, token_string: []const u8) void {
-        self.deinit();
-
-        self.raw = self.alloc.dupe(u8, token_string) catch "";
+        self.reset();
 
         if (token_string.len == 0) {
             return;
         }
+
+        self.raw = self.alloc.dupe(u8, token_string) catch "";
 
         var it = std.mem.splitScalar(u8, token_string, '.');
         if (it.next()) |pair| {
