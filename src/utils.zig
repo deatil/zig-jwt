@@ -12,7 +12,7 @@ pub fn base64Decode(alloc: Allocator, input: []const u8) ![]const u8 {
     const decode_len = try decoder.calcSizeForSlice(input);
 
     const buffer = try alloc.alloc(u8, decode_len);
-    _ = decoder.decode(buffer, input) catch {
+    decoder.decode(buffer, input) catch {
         defer alloc.free(buffer);
 
         return "";
@@ -36,7 +36,7 @@ pub fn base64UrlDecode(alloc: Allocator, input: []const u8) ![]const u8 {
     const decode_len = try decoder.calcSizeForSlice(input);
 
     const buffer = try alloc.alloc(u8, decode_len);
-    _ = decoder.decode(buffer, input) catch {
+    decoder.decode(buffer, input) catch {
         defer alloc.free(buffer);
 
         return "";
@@ -52,11 +52,15 @@ pub fn jsonEncode(alloc: Allocator, value: anytype) ![]const u8 {
 }
 
 pub fn jsonDecode(alloc: Allocator, value: []const u8) !json.Parsed(json.Value) {
-    return json.parseFromSlice(json.Value, alloc, value, .{});
+    return json.parseFromSlice(json.Value, alloc, value, .{
+        .ignore_unknown_fields = true,
+    });
 }
 
 pub fn jsonDecodeT(comptime T: type, alloc: Allocator, value: []const u8) !json.Parsed(T) {
-    return json.parseFromSlice(T, alloc, value, .{});
+    return json.parseFromSlice(T, alloc, value, .{
+        .ignore_unknown_fields = true,
+    });
 }
 
 pub fn eq(rest: []const u8, needle: []const u8) bool {
@@ -122,7 +126,7 @@ test "base64UrlEncode" {
     try testing.expectEqualStrings(msg, res3);
 }
 
-test "jsonEncode" {
+test "json encode and decode" {
     const alloc = testing.allocator;
 
     const msg = .{
@@ -145,4 +149,24 @@ test "jsonEncode" {
     const res3 = try jsonDecodeT(msg3, alloc, check);
     defer res3.deinit();
     try testing.expectEqualStrings(msg.typ, res3.value.typ);
+
+    const check5 =
+        \\{"typ":"test-data","alg": "HS256","uty":"yyuui"}
+    ;
+    const msgT5 = struct {
+        typ: []const u8,
+        alg: []const u8,
+    };
+
+    const res5 = try jsonDecodeT(msgT5, alloc, check5);
+    defer res5.deinit();
+    try testing.expectEqualStrings("test-data", res5.value.typ);
+
+    const msgT6 = struct {
+        uty: []const u8,
+    };
+
+    const res6 = try jsonDecodeT(msgT6, alloc, check5);
+    defer res6.deinit();
+    try testing.expectEqualStrings("yyuui", res6.value.uty);
 }
