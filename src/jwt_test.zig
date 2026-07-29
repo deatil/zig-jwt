@@ -33,12 +33,8 @@ test "getSigningMethod" {
 
     try testing.expectEqual(jwt.SigningMethodNone, try jwt.getSigningMethod("none"));
 
-    var need_true: bool = false;
-    jwt.getSigningMethod("HS258") catch |err| {
-        need_true = true;
-        try testing.expectEqual(jwt.Error.JWTSigningMethodNotExists, err);
-    };
-    try testing.expectEqual(true, need_true);
+    const res = jwt.getSigningMethod("HS258");
+    try testing.expectError(jwt.Error.JWTSigningMethodNotExists, res);
 }
 
 test "parse JWTTypeInvalid" {
@@ -50,12 +46,8 @@ test "parse JWTTypeInvalid" {
 
     const p = jwt.SigningMethodEdDSA.init(alloc);
 
-    var need_true: bool = false;
-    _ = p.parse(token_string, kp.public_key) catch |err| {
-        need_true = true;
-        try testing.expectEqual(jwt.Error.JWTTypeInvalid, err);
-    };
-    try testing.expectEqual(true, need_true);
+    const res = p.parse(token_string, kp.public_key);
+    try testing.expectError(jwt.Error.JWTTypeInvalid, res);
 }
 
 test "parse JWTSignatureInvalid" {
@@ -67,12 +59,8 @@ test "parse JWTSignatureInvalid" {
 
     const p = jwt.SigningMethodES256.init(alloc);
 
-    var need_true: bool = false;
-    _ = p.parse(token_string, kp.public_key) catch |err| {
-        need_true = true;
-        try testing.expectEqual(jwt.Error.JWTVerifyFail, err);
-    };
-    try testing.expectEqual(true, need_true);
+    const res = p.parse(token_string, kp.public_key);
+    try testing.expectError(jwt.Error.JWTVerifyFail, res);
 }
 
 test "Token Validator" {
@@ -604,12 +592,8 @@ test "SigningMethodES256 Check fail" {
 
     const p = jwt.SigningMethodES256.init(alloc);
 
-    var need_true: bool = false;
-    _ = p.parse(token_str, public_key) catch |err| {
-        need_true = true;
-        try testing.expectEqual(jwt.Error.JWTVerifyFail, err);
-    };
-    try testing.expectEqual(true, need_true);
+    const res = p.parse(token_str, public_key);
+    try testing.expectError(jwt.Error.JWTVerifyFail, res);
 }
 
 test "SigningMethodES256K Check" {
@@ -704,12 +688,8 @@ test "SigningMethodEdDSA Check fail" {
 
     const p = jwt.SigningMethodED25519.init(alloc);
 
-    var need_true: bool = false;
-    _ = p.parse(token_str, public_key) catch |err| {
-        need_true = true;
-        try testing.expectEqual(jwt.Error.JWTVerifyFail, err);
-    };
-    try testing.expectEqual(true, need_true);
+    const res = p.parse(token_str, public_key);
+    try testing.expectError(jwt.Error.JWTVerifyFail, res);
 }
 
 test "SigningMethodHS256 Check" {
@@ -816,12 +796,8 @@ test "SigningMethodHS256 Check fail" {
 
     const p = jwt.SigningMethodHS256.init(alloc);
 
-    var need_true: bool = false;
-    _ = p.parse(token_str, key_bytes) catch |err| {
-        need_true = true;
-        try testing.expectEqual(jwt.Error.JWTVerifyFail, err);
-    };
-    try testing.expectEqual(true, need_true);
+    const res = p.parse(token_str, key_bytes);
+    try testing.expectError(jwt.Error.JWTVerifyFail, res);
 }
 
 test "SigningMethodBLAKE2B Check" {
@@ -867,12 +843,8 @@ test "SigningMethodBLAKE2B Check fail" {
 
     const p = jwt.SigningMethodBLAKE2B.init(alloc);
 
-    var need_true: bool = false;
-    _ = p.parse(token_str, key_bytes) catch |err| {
-        need_true = true;
-        try testing.expectEqual(jwt.Error.JWTVerifyFail, err);
-    };
-    try testing.expectEqual(true, need_true);
+    const res = p.parse(token_str, key_bytes);
+    try testing.expectError(jwt.Error.JWTVerifyFail, res);
 }
 
 test "getTokenHeader" {
@@ -1208,12 +1180,8 @@ test "SigningMethodRS256 Check fail" {
 
     const p = jwt.SigningMethodRS256.init(alloc);
 
-    var need_true: bool = false;
-    _ = p.parse(token_str, public_key) catch |err| {
-        need_true = true;
-        try testing.expectEqual(jwt.Error.JWTVerifyFail, err);
-    };
-    try testing.expectEqual(true, need_true);
+    const res = p.parse(token_str, public_key);
+    try testing.expectError(jwt.Error.JWTVerifyFail, res);
 }
 
 test "SigningMethodPS256 Check" {
@@ -1289,12 +1257,8 @@ test "SigningMethodPS256 Check fail" {
 
     const p = jwt.SigningMethodPS256.init(alloc);
 
-    var need_true: bool = false;
-    _ = p.parse(token_str, public_key) catch |err| {
-        need_true = true;
-        try testing.expectEqual(jwt.Error.JWTVerifyFail, err);
-    };
-    try testing.expectEqual(true, need_true);
+    const res = p.parse(token_str, public_key);
+    try testing.expectError(jwt.Error.JWTVerifyFail, res);
 }
 
 test "SigningMethodRS256 with pkcs8 key" {
@@ -1455,12 +1419,8 @@ test "SigningMethodEdDSA JWTTokenInvalid" {
 
     const p = jwt.SigningMethodEdDSA.init(alloc);
 
-    var need_true: bool = false;
-    _ = p.parse(token_string, kp.public_key) catch |err| {
-        need_true = true;
-        try testing.expectEqual(jwt.Error.JWTTokenInvalid, err);
-    };
-    try testing.expectEqual(true, need_true);
+    const res = p.parse(token_string, kp.public_key);
+    try testing.expectError(jwt.Error.JWTTokenInvalid, res);
 }
 
 test "SigningMethodEdDSA JWTTypeInvalid" {
@@ -1486,12 +1446,8 @@ test "SigningMethodEdDSA JWTTypeInvalid" {
 
     const p = jwt.SigningMethodEdDSA.init(alloc);
 
-    var need_true: bool = false;
-    _ = p.parse(token_string, kp.public_key) catch |err| {
-        need_true = true;
-        try testing.expectEqual(jwt.Error.JWTTypeInvalid, err);
-    };
-    try testing.expectEqual(true, need_true);
+    const res = p.parse(token_string, kp.public_key);
+    try testing.expectError(jwt.Error.JWTTypeInvalid, res);
 }
 
 test "SigningMethodEdDSA JWTAlgoInvalid" {
@@ -1517,12 +1473,8 @@ test "SigningMethodEdDSA JWTAlgoInvalid" {
 
     const p = jwt.SigningMethodES256.init(alloc);
 
-    var need_true: bool = false;
-    _ = p.parse(token_string, kp.public_key) catch |err| {
-        need_true = true;
-        try testing.expectEqual(jwt.Error.JWTAlgoInvalid, err);
-    };
-    try testing.expectEqual(true, need_true);
+    const res = p.parse(token_string, kp.public_key);
+    try testing.expectError(jwt.Error.JWTAlgoInvalid, res);
 }
 
 test "SigningMethodEdDSA with function" {
@@ -1608,4 +1560,17 @@ test "SigningMethodHS256 with JWTHeaders and JWTClaims" {
     try testing.expectEqualStrings(claims.sub.?, claims2.value.sub.?);
     try testing.expectEqualStrings(claims.jti.?, claims2.value.jti.?);
     try testing.expectEqual(claims.nbf.?, claims2.value.nbf.?);
+}
+
+test "JWT getSigner" {
+    const alloc = testing.allocator;
+
+    var p = jwt.SigningMethodHS256.init(alloc);
+    try testing.expectFmt("HS256", "{s}", .{p.getSigner().alg()});
+
+    var p1 = jwt.SigningMethodRS256.init(alloc);
+    try testing.expectFmt("RS256", "{s}", .{p1.getSigner().alg()});
+
+    var p2 = jwt.SigningMethodEdDSA.init(alloc);
+    try testing.expectFmt("EdDSA", "{s}", .{p2.getSigner().alg()});
 }

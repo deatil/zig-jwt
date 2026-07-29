@@ -115,10 +115,6 @@ test "SigningBLAKE2B key short" {
     const msg = "test-data";
     const key = "test-key";
 
-    var need_true: bool = false;
-    _ = h.sign(msg, key) catch |err| {
-        need_true = true;
-        try testing.expectEqual(error.JWTBlake2bKeyTooShort, err);
-    };
-    try testing.expectEqual(true, need_true);
+    const res = h.sign(msg, key);
+    try testing.expectError(error.JWTBlake2bKeyTooShort, res);
 }

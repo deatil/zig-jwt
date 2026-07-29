@@ -28,14 +28,6 @@ pub const Token = struct {
         self.reset();
     }
 
-    pub fn reset(self: *Self) void {
-        self.alloc.free(self.raw);
-        self.alloc.free(self.msg);
-        self.alloc.free(self.header);
-        self.alloc.free(self.claims);
-        self.alloc.free(self.signature);
-    }
-
     pub fn withHeader(self: *Self, header: []const u8) !void {
         self.alloc.free(self.header);
         self.header = try self.alloc.dupe(u8, header);
@@ -184,6 +176,14 @@ pub const Token = struct {
 
     pub fn getSignature(self: *Self) ![]const u8 {
         return self.alloc.dupe(u8, self.signature);
+    }
+
+    fn reset(self: *Self) void {
+        self.alloc.free(self.raw);
+        self.alloc.free(self.msg);
+        self.alloc.free(self.header);
+        self.alloc.free(self.claims);
+        self.alloc.free(self.signature);
     }
 };
 

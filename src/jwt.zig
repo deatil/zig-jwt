@@ -105,6 +105,10 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
             };
         }
 
+        pub fn getSigner(self: Self) Signer {
+            return self.signer;
+        }
+
         pub fn alg(self: Self) []const u8 {
             return self.signer.alg();
         }
