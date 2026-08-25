@@ -4,6 +4,7 @@ const fmt = std.fmt;
 const ff = std.crypto.ff;
 const testing = std.testing;
 const base64 = std.base64;
+const asn1 = std.crypto.codecs.asn1;
 const Allocator = std.mem.Allocator;
 
 const CRTValueArray = std.ArrayList(CRTValue);
@@ -21,6 +22,20 @@ const oid_rsa_publickey = "1.2.840.113549.1.1.1";
 const FeUint = std.crypto.ff.Uint(max_modulus_bits);
 const Modulus = std.crypto.ff.Modulus(max_modulus_bits);
 const Fe = Modulus.Fe;
+
+const PrikeyData = struct {
+    version: i32,
+    n: i128,
+    e: i32,
+    d: i128,
+    p: i128,
+    q: i128,
+};
+
+const PubkeyData = struct {
+    n: i128,
+    e: i32,
+};
 
 pub const PublicKey = struct {
     n: Modulus,
@@ -64,10 +79,10 @@ pub const PublicKey = struct {
         const modulus = try parser.expectPrimitive(.integer);
         const pub_exp = try parser.expectPrimitive(.integer);
 
-        // try parser.expectEnd(seq.slice.end);
-        // try parser.expectEnd(bytes.len);
+        const n = parser.view(modulus);
+        const e = parser.view(pub_exp);
 
-        return Self.fromBytes(parser.view(modulus), parser.view(pub_exp));
+        return Self.fromBytes(n, e);
     }
 
     pub fn fromPKCS8Der(bytes: []const u8) !PublicKey {
@@ -93,6 +108,19 @@ pub const PublicKey = struct {
         };
 
         return pk;
+    }
+
+    pub fn makeDer(self: Self, alloc: Allocator) ![]const u8 {
+        const n = try self.n.v.toPrimitive(i128);
+        const e = try self.e.toPrimitive(i32);
+
+        const value = PubkeyData{
+            .n = n,
+            .e = e,
+        };
+
+        const ders = try asn1.der.encode(alloc, value);
+        return ders;
     }
 
     /// Encrypt a short message using RSAES-PKCS1-v1_5.
@@ -224,11 +252,6 @@ pub const SecretKey = struct {
         const pub_exp = try parser.expectPrimitive(.integer);
         const sec_exp = try parser.expectPrimitive(.integer);
 
-        const n = parser.view(mod);
-        const e = parser.view(pub_exp);
-
-        const d = parser.view(sec_exp);
-
         const prime1 = try parser.expectPrimitive(.integer);
         const prime2 = try parser.expectPrimitive(.integer);
 
@@ -240,6 +263,10 @@ pub const SecretKey = struct {
             else => return error.InvalidVersion,
         }
 
+        const n = parser.view(mod);
+        const e = parser.view(pub_exp);
+
+        const d = parser.view(sec_exp);
         const p = parser.view(prime1);
         const q = parser.view(prime2);
 
@@ -263,7 +290,8 @@ pub const SecretKey = struct {
         parser.seek(oid_seq.slice.end);
         const prikey = try parser.expect(.universal, false, .octetstring);
 
-        return Self.fromDer(parser.view(prikey));
+        const prikey_bytes = parser.view(prikey);
+        return Self.fromDer(prikey_bytes);
     }
 
     pub fn fromDerAuto(bytes: []const u8) !SecretKey {
@@ -1309,4 +1337,11 @@ test "SecretKey precompute" {
 
     var pri_key = try SecretKey.fromPKCS8Der(prikey_bytes);
     try pri_key.precompute();
+
+    // var pub_key = pri_key.public_key;
+    // const pub_key_der = try pub_key.makeDer(alloc);
+    // defer alloc.free(pub_key_der);
+
+    // const pri_key2 = try SecretKey.fromDer(pub_key_der);
+    // try std.testing.expectEqual(8, pri_key2.len);
 }
