@@ -40,7 +40,10 @@ pub fn SignRSAPss(comptime RSAPssType: type, comptime name: []const u8) type {
         }
 
         pub fn sign(self: Self, msg: []const u8, key: rsa.SecretKey) ![]u8 {
-            var signer = RSAPssType.Signer.init(key, null);
+            var prng = std.Random.DefaultPrng.init(0xC0FFEE_1234_5678);
+            const random = prng.random();
+
+            var signer = RSAPssType.Signer.init(random, key, null);
             signer.update(msg[0..]);
 
             var out: [max_modulus_len]u8 = undefined;

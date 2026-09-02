@@ -8,9 +8,9 @@ const hash_sha2 = std.crypto.hash.sha2;
 pub const rsa = @import("rsa/rsa.zig");
 pub const utils = @import("utils.zig");
 
-pub const RsaSha256 = rsa.PKCS1v1_5(hash_sha2.Sha256);
-pub const RsaSha384 = rsa.PKCS1v1_5(hash_sha2.Sha384);
-pub const RsaSha512 = rsa.PKCS1v1_5(hash_sha2.Sha512);
+pub const RsaSha256 = rsa.PKCS1v15(hash_sha2.Sha256);
+pub const RsaSha384 = rsa.PKCS1v15(hash_sha2.Sha384);
+pub const RsaSha512 = rsa.PKCS1v15(hash_sha2.Sha512);
 
 pub const SigningRS256 = SignRSA(RsaSha256, "RS256");
 pub const SigningRS384 = SignRSA(RsaSha384, "RS384");
