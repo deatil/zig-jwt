@@ -88,7 +88,7 @@ pub fn main(init: std.process.Init) !void {
     const p = jwt.SigningMethodEdDSA.init(alloc);
     var token = try p.parse(token_string, kp.public_key);
 
-    defer p.deinit();
+    defer token.deinit();
     
     // output: 
     // claims aud: example.com
