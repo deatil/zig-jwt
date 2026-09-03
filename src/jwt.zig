@@ -2,7 +2,7 @@ const std = @import("std");
 const fmt = std.fmt;
 const Allocator = std.mem.Allocator;
 
-pub const crypto_rsa = @import("rsa/rsa.zig");
+pub const crypto_rsa = @import("zig-rsa");
 
 pub const rsa = @import("rsa.zig");
 pub const rsa_pss = @import("rsa_pss.zig");

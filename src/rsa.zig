@@ -5,7 +5,7 @@ const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const hash_sha2 = std.crypto.hash.sha2;
 
-pub const rsa = @import("rsa/rsa.zig");
+pub const rsa = @import("zig-rsa");
 pub const utils = @import("utils.zig");
 
 pub const RsaSha256 = rsa.PKCS1v15(hash_sha2.Sha256);
@@ -41,15 +41,13 @@ pub fn SignRSA(comptime RSAType: type, comptime name: []const u8) type {
         }
 
         pub fn sign(self: Self, msg: []const u8, key: rsa.SecretKey) ![]u8 {
-            var signer = RSAType.Signer.init(key);
+            var signer = RSAType.Signer.init(self.alloc, key);
             signer.update(msg[0..]);
 
-            var out: [max_modulus_len]u8 = undefined;
-            const sig = try signer.finalize(&out);
-
+            const sig = try signer.finalize();
             const signed = sig.toBytes();
 
-            return self.alloc.dupe(u8, signed[0..]);
+            return signed;
         }
 
         pub fn verify(self: Self, msg: []const u8, signature: []u8, key: rsa.PublicKey) !bool {

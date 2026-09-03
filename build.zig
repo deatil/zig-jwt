@@ -8,6 +8,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
+    const zig_rsa_dep = b.dependency("zig-rsa", .{
+        .target = target,
+    });
+    mod.addImport("zig-rsa", zig_rsa_dep.module("zig-rsa"));
+
     // -Dtest-filter="..."
     const test_filter = b.option([]const []const u8, "test-filter", "Filter for tests to run");
 

@@ -2,8 +2,9 @@ const std = @import("std");
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 
-pub const der = @import("rsa/der.zig");
-pub const oids = @import("rsa/oid.zig");
+const rsa = @import("zig-rsa");
+pub const der = rsa.der;
+pub const oids = rsa.oids;
 pub const utils = @import("utils.zig");
 
 pub const Ed25519 = std.crypto.sign.Ed25519;

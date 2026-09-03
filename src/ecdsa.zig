@@ -4,8 +4,9 @@ const Allocator = std.mem.Allocator;
 
 pub const ecdsa = std.crypto.sign.ecdsa;
 
-pub const der = @import("rsa/der.zig");
-pub const oids = @import("rsa/oid.zig");
+const rsa = @import("zig-rsa");
+pub const der = rsa.der;
+pub const oids = rsa.oids;
 pub const utils = @import("utils.zig");
 
 pub const SigningES256 = SignECDSA(ecdsa.EcdsaP256Sha256, "ES256");

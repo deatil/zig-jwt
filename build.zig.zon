@@ -1,10 +1,15 @@
 .{
     .name = .zig_jwt,
     .description = "A JWT (JSON Web Token) library for zig.",
-    .version = "1.5.16",
+    .version = "1.6.0",
     .fingerprint = 0x30a5aec248bd7ac3,
     .minimum_zig_version = "0.16.0",
-    .dependencies = .{},
+    .dependencies = .{
+        .@"zig-rsa" = .{
+            .url = "git+https://github.com/deatil/zig-rsa?ref=main#393f298cecf36b352b0f15deb509100368d67107",
+            .hash = "zig_rsa-0.0.5-JhR-HHY3AgDPkcebpmztt-mbK4R2zwdPCFnfaoRjJaB-",
+        },
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",

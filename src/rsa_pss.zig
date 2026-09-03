@@ -4,7 +4,7 @@ const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const hash_sha2 = std.crypto.hash.sha2;
 
-pub const rsa = @import("rsa/rsa.zig");
+pub const rsa = @import("zig-rsa");
 pub const utils = @import("utils.zig");
 
 pub const RsaPssSha256 = rsa.Pss(hash_sha2.Sha256);
@@ -43,22 +43,24 @@ pub fn SignRSAPss(comptime RSAPssType: type, comptime name: []const u8) type {
             var prng = std.Random.DefaultPrng.init(0xC0FFEE_1234_5678);
             const random = prng.random();
 
-            var signer = RSAPssType.Signer.init(random, key, null);
+            var signer = RSAPssType.Signer.init(self.alloc, random, key, .{
+                .salt_leng = rsa.pss_salt_length_equals_hash,
+            });
             signer.update(msg[0..]);
 
-            var out: [max_modulus_len]u8 = undefined;
-            const sig = try signer.finalize(&out);
-
+            const sig = try signer.finalize();
             const signed = sig.toBytes();
 
-            return self.alloc.dupe(u8, signed[0..]);
+            return signed;
         }
 
         pub fn verify(self: Self, msg: []const u8, signature: []u8, key: rsa.PublicKey) !bool {
             _ = self;
 
             var verifier = RSAPssType.Signature.fromBytes(signature);
-            try verifier.verify(msg, key, rsa.pss_salt_length_auto);
+            try verifier.verify(msg, key, .{
+                .salt_leng = rsa.pss_salt_length_auto,
+            });
 
             return true;
         }
