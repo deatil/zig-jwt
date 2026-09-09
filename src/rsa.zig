@@ -80,8 +80,10 @@ test "SigningRS256" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try rsa.SecretKey.fromDer(prikey_bytes);
+    var secret_key = try rsa.SecretKey.fromDer(alloc, prikey_bytes);
     const public_key = try rsa.PublicKey.fromDer(pubkey_bytes);
+
+    defer secret_key.deinit(alloc);
 
     const msg = "test-data";
 
@@ -114,8 +116,10 @@ test "SigningRS384" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try rsa.SecretKey.fromDer(prikey_bytes);
+    var secret_key = try rsa.SecretKey.fromDer(alloc, prikey_bytes);
     const public_key = try rsa.PublicKey.fromDer(pubkey_bytes);
+
+    defer secret_key.deinit(alloc);
 
     const msg = "test-data";
 
@@ -148,8 +152,10 @@ test "SigningRS512" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try rsa.SecretKey.fromDer(prikey_bytes);
+    var secret_key = try rsa.SecretKey.fromDer(alloc, prikey_bytes);
     const public_key = try rsa.PublicKey.fromDer(pubkey_bytes);
+
+    defer secret_key.deinit(alloc);
 
     const msg = "test-data";
 
@@ -182,8 +188,10 @@ test "SigningRS256 check" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try rsa.SecretKey.fromDer(prikey_bytes);
+    var secret_key = try rsa.SecretKey.fromDer(alloc, prikey_bytes);
     const public_key = try rsa.PublicKey.fromDer(pubkey_bytes);
+
+    defer secret_key.deinit(alloc);
 
     const msg = "test-data";
 

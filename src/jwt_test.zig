@@ -896,8 +896,10 @@ test "SigningMethodRS256" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try jwt.crypto_rsa.SecretKey.fromDer(prikey_bytes);
+    var secret_key = try jwt.crypto_rsa.SecretKey.fromDer(alloc, prikey_bytes);
     const public_key = try jwt.crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+
+    defer secret_key.deinit(alloc);
 
     const claims = .{
         .aud = "example.com",
@@ -933,8 +935,10 @@ test "SigningMethodRS384" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try jwt.crypto_rsa.SecretKey.fromDer(prikey_bytes);
+    var secret_key = try jwt.crypto_rsa.SecretKey.fromDer(alloc, prikey_bytes);
     const public_key = try jwt.crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+
+    defer secret_key.deinit(alloc);
 
     const claims = .{
         .aud = "example.com",
@@ -970,8 +974,10 @@ test "SigningMethodRS512" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try jwt.crypto_rsa.SecretKey.fromDer(prikey_bytes);
+    var secret_key = try jwt.crypto_rsa.SecretKey.fromDer(alloc, prikey_bytes);
     const public_key = try jwt.crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+
+    defer secret_key.deinit(alloc);
 
     const claims = .{
         .aud = "example.com",
@@ -1007,8 +1013,10 @@ test "SigningMethodPS256" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try jwt.crypto_rsa.SecretKey.fromDer(prikey_bytes);
+    var secret_key = try jwt.crypto_rsa.SecretKey.fromDer(alloc, prikey_bytes);
     const public_key = try jwt.crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+
+    defer secret_key.deinit(alloc);
 
     const claims = .{
         .aud = "example.com",
@@ -1044,8 +1052,10 @@ test "SigningMethodPS384" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try jwt.crypto_rsa.SecretKey.fromDer(prikey_bytes);
+    var secret_key = try jwt.crypto_rsa.SecretKey.fromDer(alloc, prikey_bytes);
     const public_key = try jwt.crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+
+    defer secret_key.deinit(alloc);
 
     const claims = .{
         .aud = "example.com",
@@ -1081,8 +1091,10 @@ test "SigningMethodPS512" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try jwt.crypto_rsa.SecretKey.fromDer(prikey_bytes);
+    var secret_key = try jwt.crypto_rsa.SecretKey.fromDer(alloc, prikey_bytes);
     const public_key = try jwt.crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+
+    defer secret_key.deinit(alloc);
 
     const claims = .{
         .aud = "example.com",
@@ -1273,8 +1285,10 @@ test "SigningMethodRS256 with pkcs8 key" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try jwt.crypto_rsa.SecretKey.fromPKCS8Der(prikey_bytes);
+    var secret_key = try jwt.crypto_rsa.SecretKey.fromPKCS8Der(alloc, prikey_bytes);
     const public_key = try jwt.crypto_rsa.PublicKey.fromPKCS8Der(pubkey_bytes);
+
+    defer secret_key.deinit(alloc);
 
     const claims = .{
         .aud = "example.com",
@@ -1310,8 +1324,10 @@ test "SigningMethodPS256 with pkcs8 key" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try jwt.crypto_rsa.SecretKey.fromPKCS8Der(prikey_bytes);
+    var secret_key = try jwt.crypto_rsa.SecretKey.fromPKCS8Der(alloc, prikey_bytes);
     const public_key = try jwt.crypto_rsa.PublicKey.fromPKCS8Der(pubkey_bytes);
+
+    defer secret_key.deinit(alloc);
 
     const claims = .{
         .aud = "example.com",
