@@ -2,6 +2,7 @@ const std = @import("std");
 const fmt = std.fmt;
 const json = std.json;
 const testing = std.testing;
+const Random = std.Random;
 const Allocator = std.mem.Allocator;
 const Writer = std.Io.Writer;
 const Allocating = std.Io.Writer.Allocating;
@@ -53,7 +54,7 @@ pub fn Builder(comptime Signer: type, comptime SecretKeyType: type) type {
             return claims;
         }
 
-        pub fn getToken(self: *Self, secret_key: SecretKeyType) !Token {
+        pub fn getToken(self: *Self, random: Random, secret_key: SecretKeyType) !Token {
             var header = try self.getHeaders();
             if (header.len == 0) {
                 var h = self.headersData();
@@ -75,7 +76,7 @@ pub fn Builder(comptime Signer: type, comptime SecretKeyType: type) type {
             const signing_string = try t.signingString();
             defer self.alloc.free(signing_string);
 
-            const signature = try self.signer.sign(signing_string, secret_key);
+            const signature = try self.signer.sign(random, signing_string, secret_key);
             defer self.alloc.free(signature);
 
             try t.withSignature(signature);
@@ -299,7 +300,11 @@ test "Builder" {
 
     const kp = eddsa.Ed25519.KeyPair.generate(io);
 
-    var t = try build.getToken(kp.secret_key);
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    var t = try build.getToken(random, kp.secret_key);
     const token_string = try t.signedString();
 
     defer t.deinit();
@@ -342,7 +347,11 @@ test "Builder 2" {
 
     const kp = eddsa.Ed25519.KeyPair.generate(io);
 
-    var t = try build.getToken(kp.secret_key);
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    var t = try build.getToken(random, kp.secret_key);
     const token_string = try t.signedString();
 
     defer t.deinit();
@@ -382,7 +391,11 @@ test "Builder 3" {
 
     const kp = eddsa.Ed25519.KeyPair.generate(io);
 
-    var t = try build.getToken(kp.secret_key);
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    var t = try build.getToken(random, kp.secret_key);
     const token_string = try t.signedString();
 
     defer t.deinit();

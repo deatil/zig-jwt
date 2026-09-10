@@ -1,5 +1,6 @@
 const std = @import("std");
 const fmt = std.fmt;
+const Random = std.Random;
 const Allocator = std.mem.Allocator;
 
 pub const crypto_rsa = @import("zig-rsa");
@@ -118,17 +119,17 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
         }
 
         // use SigningMethod to make token
-        pub fn sign(self: Self, claims: anytype, sign_key: SignKeyType) ![]const u8 {
+        pub fn sign(self: Self, random: Random, claims: anytype, sign_key: SignKeyType) ![]const u8 {
             const header = .{
                 .typ = "JWT",
                 .alg = self.signer.alg(),
             };
 
-            return self.signWithHeader(header, claims, sign_key);
+            return self.signWithHeader(random, header, claims, sign_key);
         }
 
         // use SigningMethod with header to make token
-        pub fn signWithHeader(self: Self, header: anytype, claims: anytype, sign_key: SignKeyType) ![]const u8 {
+        pub fn signWithHeader(self: Self, random: Random, header: anytype, claims: anytype, sign_key: SignKeyType) ![]const u8 {
             var t = Token.init(self.alloc);
             try t.setHeader(header);
             try t.setClaims(claims);
@@ -138,7 +139,7 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
             const signing_string = try t.signingString();
             defer self.alloc.free(signing_string);
 
-            const signature = try self.signer.sign(signing_string, sign_key);
+            const signature = try self.signer.sign(random, signing_string, sign_key);
             defer self.alloc.free(signature);
 
             try t.withSignature(signature);
@@ -203,9 +204,9 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
 }
 
 // use SigningMethod to make token
-pub fn sign(comptime T: type, alloc: Allocator, SigningMethod: type, claims: anytype, key: T) ![]const u8 {
+pub fn sign(comptime T: type, alloc: Allocator, random: Random, SigningMethod: type, claims: anytype, key: T) ![]const u8 {
     const s = SigningMethod.init(alloc);
-    const token_string = try s.sign(claims, key);
+    const token_string = try s.sign(random, claims, key);
     return token_string;
 }
 

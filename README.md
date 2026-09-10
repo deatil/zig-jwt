@@ -71,13 +71,15 @@ pub fn main(init: std.process.Init) !void {
 
     const kp = jwt.eddsa.Ed25519.KeyPair.generate(io);
 
+    var prng = std.Random.DefaultPrng.init(1234);
+
     const claims = .{
         .aud = "example.com",
         .sub = "foo",
     };
 
     const s = jwt.SigningMethodEdDSA.init(alloc);
-    const token_string = try s.sign(claims, kp.secret_key);
+    const token_string = try s.sign(prng.random(), claims, kp.secret_key);
 
     defer alloc.free(token_string);
     
@@ -177,12 +179,14 @@ var public_key: jwt.crypto_rsa.PublicKey = undefined;
 // rsa no generate
 
 // from pkcs1 der bytes
-const secret_key = try jwt.crypto_rsa.SecretKey.fromDer(prikey_bytes);
+const secret_key = try jwt.crypto_rsa.SecretKey.fromDer(alloc, prikey_bytes);
 const public_key = try jwt.crypto_rsa.PublicKey.fromDer(pubkey_bytes);
 
 // from pkcs8 der bytes
-const secret_key = try jwt.crypto_rsa.SecretKey.fromPKCS8Der(prikey_bytes);
+const secret_key = try jwt.crypto_rsa.SecretKey.fromPKCS8Der(alloc, prikey_bytes);
 const public_key = try jwt.crypto_rsa.PublicKey.fromPKCS8Der(pubkey_bytes);
+
+defer secret_key.deinit(alloc);
 ~~~
 
 ECDSA PublicKey:

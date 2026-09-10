@@ -2,6 +2,7 @@ const std = @import("std");
 const fmt = std.fmt;
 const testing = std.testing;
 const blake2 = std.crypto.hash.blake2;
+const Random = std.Random;
 const Allocator = std.mem.Allocator;
 
 pub const SigningBLAKE2B = SignBlake2b(blake2.Blake2b256, "BLAKE2B");
@@ -30,7 +31,7 @@ pub fn SignBlake2b(comptime Hash: type, comptime name: []const u8) type {
             return digest_length;
         }
 
-        pub fn sign(self: Self, msg: []const u8, key: []const u8) ![]u8 {
+        pub fn sign(self: Self, _: Random, msg: []const u8, key: []const u8) ![]u8 {
             if (key.len * 8 < 256) {
                 return error.JWTBlake2bKeyTooShort;
             }
@@ -87,7 +88,11 @@ test "SigningBLAKE2B" {
     const key = "12345678901234567890as1234567890";
     const sign = "d40bb120a0915ab65e0051fca93854775bd1380a1fb012ebd5c5df361159937e";
 
-    const signed = try h.sign(msg, key);
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    const signed = try h.sign(random, msg, key);
 
     defer alloc.free(signed);
 
@@ -115,6 +120,10 @@ test "SigningBLAKE2B key short" {
     const msg = "test-data";
     const key = "test-key";
 
-    const res = h.sign(msg, key);
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    const res = h.sign(random, msg, key);
     try testing.expectError(error.JWTBlake2bKeyTooShort, res);
 }

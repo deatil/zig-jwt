@@ -1,5 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
+const Random = std.Random;
 const Allocator = std.mem.Allocator;
 
 const rsa = @import("zig-rsa");
@@ -36,7 +37,7 @@ pub fn SignEdDSA(comptime name: []const u8) type {
             return encoded_length;
         }
 
-        pub fn sign(self: Self, msg: []const u8, key: Ed25519.SecretKey) ![]u8 {
+        pub fn sign(self: Self, _: Random, msg: []const u8, key: Ed25519.SecretKey) ![]u8 {
             var secret_key = try Ed25519.KeyPair.fromSecretKey(key);
 
             const sig = try secret_key.sign(msg[0..], null);
@@ -149,8 +150,12 @@ test "SigningEdDSA with der key" {
 
     const msg = "test-data";
 
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
     const h = SigningEdDSA.init(alloc);
-    const signed = try h.sign(msg, secret_key);
+    const signed = try h.sign(random, msg, secret_key);
     defer alloc.free(signed);
 
     try testing.expectEqual(64, signed.len);
@@ -175,7 +180,11 @@ test "SigningEdDSA" {
 
     const msg = "test-data";
 
-    const signed = try h.sign(msg, kp.secret_key);
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    const signed = try h.sign(random, msg, kp.secret_key);
     defer alloc.free(signed);
 
     try testing.expectEqual(64, signed.len);
@@ -200,7 +209,11 @@ test "SigningED25519" {
 
     const msg = "test-data";
 
-    const signed = try h.sign(msg, kp.secret_key);
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    const signed = try h.sign(random, msg, kp.secret_key);
     defer alloc.free(signed);
 
     try testing.expectEqual(64, signed.len);

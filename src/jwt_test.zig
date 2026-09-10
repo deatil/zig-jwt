@@ -2,8 +2,13 @@ const std = @import("std");
 const fmt = std.fmt;
 const time = std.time;
 const testing = std.testing;
+const Random = std.Random;
 
 const jwt = @import("jwt.zig");
+
+const random = (Random.IoSource{
+    .io = testing.io,
+}).interface();
 
 test "getSigningMethod" {
     try testing.expectEqual(jwt.SigningMethodRS256, try jwt.getSigningMethod("RS256"));
@@ -109,7 +114,7 @@ test "SigningMethodEdDSA builder" {
     try c.relatedTo(claims.sub);
     try c.end();
 
-    var t = try build.getToken(kp.secret_key);
+    var t = try build.getToken(random, kp.secret_key);
     defer t.deinit();
 
     const token_string = try t.signedString();
@@ -146,7 +151,7 @@ test "SigningMethodEdDSA signWithHeader" {
         .tuy = "data123",
     };
 
-    const token_string = try s.signWithHeader(header, claims, kp.secret_key);
+    const token_string = try s.signWithHeader(random, header, claims, kp.secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
     try testing.expectEqualStrings("EdDSA", header.alg);
@@ -185,7 +190,7 @@ test "SigningMethodEdDSA" {
     };
 
     const s = jwt.SigningMethodEdDSA.init(alloc);
-    const token_string = try s.sign(claims, kp.secret_key);
+    const token_string = try s.sign(random, claims, kp.secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -212,7 +217,7 @@ test "SigningMethodES256" {
     };
 
     const s = jwt.SigningMethodES256.init(alloc);
-    const token_string = try s.sign(claims, kp.secret_key);
+    const token_string = try s.sign(random, claims, kp.secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -239,7 +244,7 @@ test "SigningMethodES384" {
     };
 
     const s = jwt.SigningMethodES384.init(alloc);
-    const token_string = try s.sign(claims, kp.secret_key);
+    const token_string = try s.sign(random, claims, kp.secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -266,7 +271,7 @@ test "SigningMethodES256K" {
     };
 
     const s = jwt.SigningMethodES256K.init(alloc);
-    const token_string = try s.sign(claims, kp.secret_key);
+    const token_string = try s.sign(random, claims, kp.secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -292,7 +297,7 @@ test "SigningMethodHMD5" {
     const key = "test-key";
 
     const s = jwt.SigningMethodHMD5.init(alloc);
-    const token_string = try s.sign(claims, key);
+    const token_string = try s.sign(random, claims, key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -318,7 +323,7 @@ test "SigningMethodHSHA1" {
     const key = "test-key";
 
     const s = jwt.SigningMethodHSHA1.init(alloc);
-    const token_string = try s.sign(claims, key);
+    const token_string = try s.sign(random, claims, key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -344,7 +349,7 @@ test "SigningMethodHS224" {
     const key = "test-key";
 
     const s = jwt.SigningMethodHS224.init(alloc);
-    const token_string = try s.sign(claims, key);
+    const token_string = try s.sign(random, claims, key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -370,7 +375,7 @@ test "SigningMethodHS256" {
     const key = "test-key";
 
     const s = jwt.SigningMethodHS256.init(alloc);
-    const token_string = try s.sign(claims, key);
+    const token_string = try s.sign(random, claims, key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -396,7 +401,7 @@ test "SigningMethodHS384" {
     const key = "test-key";
 
     const s = jwt.SigningMethodHS384.init(alloc);
-    const token_string = try s.sign(claims, key);
+    const token_string = try s.sign(random, claims, key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -422,7 +427,7 @@ test "SigningMethodHS512" {
     const key = "test-key";
 
     const s = jwt.SigningMethodHS512.init(alloc);
-    const token_string = try s.sign(claims, key);
+    const token_string = try s.sign(random, claims, key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -448,7 +453,7 @@ test "SigningMethodBLAKE2B" {
     const key = "12345678901234567890as1234567890";
 
     const s = jwt.SigningMethodBLAKE2B.init(alloc);
-    const token_string = try s.sign(claims, key);
+    const token_string = try s.sign(random, claims, key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -474,7 +479,7 @@ test "SigningMethodNone" {
     const key = "";
 
     const s = jwt.SigningMethodNone.init(alloc);
-    const token_string = try s.sign(claims, key);
+    const token_string = try s.sign(random, claims, key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -526,7 +531,7 @@ test "SigningMethodES256 Check" {
     };
 
     const s = jwt.SigningMethodES256.init(alloc);
-    const token_string = try s.sign(claims, secret_key);
+    const token_string = try s.sign(random, claims, secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -564,7 +569,7 @@ test "SigningMethodES384 Check" {
     };
 
     const s = jwt.SigningMethodES384.init(alloc);
-    const token_string = try s.sign(claims, secret_key);
+    const token_string = try s.sign(random, claims, secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -619,7 +624,7 @@ test "SigningMethodES256K Check" {
     };
 
     const s = jwt.SigningMethodES256K.init(alloc);
-    const token_string = try s.sign(claims, secret_key);
+    const token_string = try s.sign(random, claims, secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -658,7 +663,7 @@ test "SigningMethodEdDSA Check" {
     };
 
     const s = jwt.SigningMethodED25519.init(alloc);
-    const token_string = try s.sign(claims, secret_key);
+    const token_string = try s.sign(random, claims, secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -708,7 +713,7 @@ test "SigningMethodHS256 Check" {
     };
 
     const s = jwt.SigningMethodHS256.init(alloc);
-    const token_string = try s.sign(claims, key_bytes);
+    const token_string = try s.sign(random, claims, key_bytes);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -739,7 +744,7 @@ test "SigningMethodHS384 Check" {
     };
 
     const s = jwt.SigningMethodHS384.init(alloc);
-    const token_string = try s.sign(claims, key_bytes);
+    const token_string = try s.sign(random, claims, key_bytes);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -770,7 +775,7 @@ test "SigningMethodHS512 Check" {
     };
 
     const s = jwt.SigningMethodHS512.init(alloc);
-    const token_string = try s.sign(claims, key_bytes);
+    const token_string = try s.sign(random, claims, key_bytes);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -816,7 +821,7 @@ test "SigningMethodBLAKE2B Check" {
     };
 
     const s = jwt.SigningMethodBLAKE2B.init(alloc);
-    const token_string = try s.sign(claims, key_bytes);
+    const token_string = try s.sign(random, claims, key_bytes);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
     try testing.expectEqualStrings(token_str, token_string);
@@ -868,7 +873,7 @@ test "SigningMethodES256 with JWTClaims" {
     };
 
     const s = jwt.SigningMethodES256.init(alloc);
-    const token_string = try s.sign(claims, kp.secret_key);
+    const token_string = try s.sign(random, claims, kp.secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -907,7 +912,7 @@ test "SigningMethodRS256" {
     };
 
     const s = jwt.SigningMethodRS256.init(alloc);
-    const token_string = try s.sign(claims, secret_key);
+    const token_string = try s.sign(random, claims, secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -946,7 +951,7 @@ test "SigningMethodRS384" {
     };
 
     const s = jwt.SigningMethodRS384.init(alloc);
-    const token_string = try s.sign(claims, secret_key);
+    const token_string = try s.sign(random, claims, secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -985,7 +990,7 @@ test "SigningMethodRS512" {
     };
 
     const s = jwt.SigningMethodRS512.init(alloc);
-    const token_string = try s.sign(claims, secret_key);
+    const token_string = try s.sign(random, claims, secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -1024,7 +1029,7 @@ test "SigningMethodPS256" {
     };
 
     const s = jwt.SigningMethodPS256.init(alloc);
-    const token_string = try s.sign(claims, secret_key);
+    const token_string = try s.sign(random, claims, secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -1063,7 +1068,7 @@ test "SigningMethodPS384" {
     };
 
     const s = jwt.SigningMethodPS384.init(alloc);
-    const token_string = try s.sign(claims, secret_key);
+    const token_string = try s.sign(random, claims, secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -1102,7 +1107,7 @@ test "SigningMethodPS512" {
     };
 
     const s = jwt.SigningMethodPS512.init(alloc);
-    const token_string = try s.sign(claims, secret_key);
+    const token_string = try s.sign(random, claims, secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -1296,7 +1301,7 @@ test "SigningMethodRS256 with pkcs8 key" {
     };
 
     const s = jwt.SigningMethodRS256.init(alloc);
-    const token_string = try s.sign(claims, secret_key);
+    const token_string = try s.sign(random, claims, secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -1335,7 +1340,7 @@ test "SigningMethodPS256 with pkcs8 key" {
     };
 
     const s = jwt.SigningMethodPS256.init(alloc);
-    const token_string = try s.sign(claims, secret_key);
+    const token_string = try s.sign(random, claims, secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -1405,7 +1410,7 @@ test "SigningMethodEdDSA type" {
     };
 
     const s = jwt.SigningMethodEdDSA.init(alloc);
-    const token_string = try s.signWithHeader(headers, claims, kp.secret_key);
+    const token_string = try s.signWithHeader(random, headers, claims, kp.secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -1454,7 +1459,7 @@ test "SigningMethodEdDSA JWTTypeInvalid" {
     };
 
     const s = jwt.SigningMethodEdDSA.init(alloc);
-    const token_string = try s.signWithHeader(headers, claims, kp.secret_key);
+    const token_string = try s.signWithHeader(random, headers, claims, kp.secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -1481,7 +1486,7 @@ test "SigningMethodEdDSA JWTAlgoInvalid" {
     };
 
     const s = jwt.SigningMethodES256.init(alloc);
-    const token_string = try s.signWithHeader(headers, claims, kp.secret_key);
+    const token_string = try s.signWithHeader(random, headers, claims, kp.secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -1504,7 +1509,7 @@ test "SigningMethodEdDSA with function" {
         .sub = "foo",
     };
 
-    const token_string = try jwt.sign(Ed25519.SecretKey, alloc, jwt.SigningMethodEdDSA, claims, kp.secret_key);
+    const token_string = try jwt.sign(Ed25519.SecretKey, alloc, random, jwt.SigningMethodEdDSA, claims, kp.secret_key);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 
@@ -1550,7 +1555,7 @@ test "SigningMethodHS256 with JWTHeaders and JWTClaims" {
     };
 
     const s = jwt.SigningMethodHS256.init(alloc);
-    const token_string = try s.signWithHeader(headers, claims, key_bytes);
+    const token_string = try s.signWithHeader(random, headers, claims, key_bytes);
     defer alloc.free(token_string);
     try testing.expectEqual(true, token_string.len > 0);
 

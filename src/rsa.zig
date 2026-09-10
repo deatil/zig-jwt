@@ -2,8 +2,9 @@ const std = @import("std");
 const fmt = std.fmt;
 const base64 = std.base64;
 const testing = std.testing;
-const Allocator = std.mem.Allocator;
 const hash_sha2 = std.crypto.hash.sha2;
+const Random = std.Random;
+const Allocator = std.mem.Allocator;
 
 pub const rsa = @import("zig-rsa");
 pub const utils = @import("utils.zig");
@@ -40,7 +41,7 @@ pub fn SignRSA(comptime RSAType: type, comptime name: []const u8) type {
             return max_modulus_len;
         }
 
-        pub fn sign(self: Self, msg: []const u8, key: rsa.SecretKey) ![]u8 {
+        pub fn sign(self: Self, _: Random, msg: []const u8, key: rsa.SecretKey) ![]u8 {
             var signer = RSAType.Signer.init(self.alloc, key);
             signer.update(msg[0..]);
 
@@ -87,7 +88,11 @@ test "SigningRS256" {
 
     const msg = "test-data";
 
-    const signed = try h.sign(msg, secret_key);
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    const signed = try h.sign(random, msg, secret_key);
     defer alloc.free(signed);
 
     try testing.expectEqual(256, signed.len);
@@ -123,7 +128,11 @@ test "SigningRS384" {
 
     const msg = "test-data";
 
-    const signed = try h.sign(msg, secret_key);
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    const signed = try h.sign(random, msg, secret_key);
     defer alloc.free(signed);
 
     try testing.expectEqual(256, signed.len);
@@ -159,7 +168,11 @@ test "SigningRS512" {
 
     const msg = "test-data";
 
-    const signed = try h.sign(msg, secret_key);
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    const signed = try h.sign(random, msg, secret_key);
     defer alloc.free(signed);
 
     try testing.expectEqual(256, signed.len);
@@ -195,7 +208,11 @@ test "SigningRS256 check" {
 
     const msg = "test-data";
 
-    const signed = try h.sign(msg, secret_key);
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    const signed = try h.sign(random, msg, secret_key);
     defer alloc.free(signed);
 
     var buf: [256]u8 = undefined;

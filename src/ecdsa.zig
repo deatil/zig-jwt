@@ -1,5 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
+const Random = std.Random;
 const Allocator = std.mem.Allocator;
 
 pub const ecdsa = std.crypto.sign.ecdsa;
@@ -39,7 +40,7 @@ pub fn SignECDSA(comptime EC: type, comptime name: []const u8) type {
             return encoded_length;
         }
 
-        pub fn sign(self: Self, msg: []const u8, key: EC.SecretKey) ![]u8 {
+        pub fn sign(self: Self, _: Random, msg: []const u8, key: EC.SecretKey) ![]u8 {
             var secret_key = try EC.KeyPair.fromSecretKey(key);
 
             const sig = try secret_key.sign(msg[0..], null);
@@ -223,8 +224,12 @@ test "SigningES256 with der key" {
 
     const msg = "test-data";
 
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
     const h = SigningES256.init(alloc);
-    const signed = try h.sign(msg, secret_key);
+    const signed = try h.sign(random, msg, secret_key);
 
     defer alloc.free(signed);
 
@@ -252,8 +257,12 @@ test "SigningES256 with der pkcs8 key" {
 
     const msg = "test-data";
 
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
     const h = SigningES256.init(alloc);
-    const signed = try h.sign(msg, secret_key);
+    const signed = try h.sign(random, msg, secret_key);
 
     defer alloc.free(signed);
 
@@ -281,8 +290,12 @@ test "SigningES256 with der pkcs8 key no namedcurve" {
 
     const msg = "test-data";
 
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
     const h = SigningES256.init(alloc);
-    const signed = try h.sign(msg, secret_key);
+    const signed = try h.sign(random, msg, secret_key);
 
     defer alloc.free(signed);
 
@@ -312,8 +325,12 @@ test "SigningES256 with der key use parseSecretKeyDerAuto" {
 
         const msg = "test-data";
 
+        const random = (Random.IoSource{
+            .io = testing.io,
+        }).interface();
+
         const h = SigningES256.init(alloc);
-        const signed = try h.sign(msg, secret_key);
+        const signed = try h.sign(random, msg, secret_key);
 
         defer alloc.free(signed);
 
@@ -340,8 +357,12 @@ test "SigningES256 with der key use parseSecretKeyDerAuto" {
 
         const msg = "test-data";
 
+        const random = (Random.IoSource{
+            .io = testing.io,
+        }).interface();
+
         const h = SigningES256.init(alloc);
-        const signed = try h.sign(msg, secret_key);
+        const signed = try h.sign(random, msg, secret_key);
 
         defer alloc.free(signed);
 
@@ -377,7 +398,11 @@ test "SigningES384 with der key" {
 
     const msg = "test-data";
 
-    const signed = try h.sign(msg, secret_key);
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    const signed = try h.sign(random, msg, secret_key);
 
     defer alloc.free(signed);
 
@@ -412,7 +437,11 @@ test "SigningES384 with der pkcs8 key" {
 
     const msg = "test-data";
 
-    const signed = try h.sign(msg, secret_key);
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    const signed = try h.sign(random, msg, secret_key);
 
     defer alloc.free(signed);
 
@@ -440,8 +469,12 @@ test "SigningES256K with der pkcs8 key" {
 
     const msg = "test-data";
 
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
     const h = SigningES256K.init(alloc);
-    const signed = try h.sign(msg, secret_key);
+    const signed = try h.sign(random, msg, secret_key);
 
     defer alloc.free(signed);
 
@@ -467,7 +500,11 @@ test "SigningES256" {
 
     const msg = "test-data";
 
-    const signed = try h.sign(msg, kp.secret_key);
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    const signed = try h.sign(random, msg, kp.secret_key);
 
     defer alloc.free(signed);
 
@@ -493,7 +530,11 @@ test "SigningES384" {
 
     const msg = "test-data";
 
-    const signed = try h.sign(msg, kp.secret_key);
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    const signed = try h.sign(random, msg, kp.secret_key);
 
     defer alloc.free(signed);
 
@@ -519,7 +560,11 @@ test "SigningES256K" {
 
     const msg = "test-data";
 
-    const signed = try h.sign(msg, kp.secret_key);
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    const signed = try h.sign(random, msg, kp.secret_key);
 
     defer alloc.free(signed);
 

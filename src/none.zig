@@ -1,6 +1,7 @@
 const std = @import("std");
 const fmt = std.fmt;
 const testing = std.testing;
+const Random = std.Random;
 const Allocator = std.mem.Allocator;
 
 pub const SigningNone = SignNone("none");
@@ -29,7 +30,7 @@ pub fn SignNone(comptime name: []const u8) type {
             return encoded_length;
         }
 
-        pub fn sign(self: Self, msg: []const u8, key: []const u8) ![]u8 {
+        pub fn sign(self: Self, _: Random, msg: []const u8, key: []const u8) ![]u8 {
             _ = self;
             _ = msg;
             _ = key;
@@ -63,7 +64,11 @@ test "SigningNone" {
 
     const msg = "test-data";
 
-    const signed = try h.sign(msg, "");
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    const signed = try h.sign(random, msg, "");
     defer alloc.free(signed);
 
     try testing.expectEqual(0, signed.len);
