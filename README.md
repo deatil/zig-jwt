@@ -72,6 +72,7 @@ pub fn main(init: std.process.Init) !void {
     const kp = jwt.eddsa.Ed25519.KeyPair.generate(io);
 
     var prng = std.Random.DefaultPrng.init(1234);
+    const random = prng.random();
 
     const claims = .{
         .aud = "example.com",
@@ -79,7 +80,7 @@ pub fn main(init: std.process.Init) !void {
     };
 
     const s = jwt.SigningMethodEdDSA.init(alloc);
-    const token_string = try s.sign(prng.random(), claims, kp.secret_key);
+    const token_string = try s.sign(random, claims, kp.secret_key);
 
     defer alloc.free(token_string);
     
@@ -259,6 +260,7 @@ const std = @import("std");
 const jwt = @import("zig-jwt");
 
 const ecdsa = std.crypto.sign.ecdsa;
+const Random = std.Random;
 
 // public custom signing method
 pub const SigningMethodES3_384 = jwt.JWT(SigningES3_384, ecdsa.EcdsaP384Sha3_384.SecretKey, ecdsa.EcdsaP384Sha3_384.PublicKey);
@@ -291,7 +293,9 @@ fn SignCustom(comptime EC: type, comptime name: []const u8) type {
             return encoded_length;
         }
 
-        pub fn sign(self: Self, msg: []const u8, key: EC.SecretKey) ![]u8 {
+        pub fn sign(self: Self, random: Random, msg: []const u8, key: EC.SecretKey) ![]u8 {
+            _ := random;
+
             var secret_key = try EC.KeyPair.fromSecretKey(key);
 
             const sig = try secret_key.sign(msg[0..], null);
