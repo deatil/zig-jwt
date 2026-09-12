@@ -52,10 +52,8 @@ pub fn SignRSA(comptime RSAType: type, comptime name: []const u8) type {
         }
 
         pub fn verify(self: Self, msg: []const u8, signature: []u8, key: rsa.PublicKey) !bool {
-            _ = self;
-
             var sig = RSAType.Signature.fromBytes(signature);
-            try sig.verify(msg, key);
+            try sig.verify(self.alloc, msg, key);
 
             return true;
         }

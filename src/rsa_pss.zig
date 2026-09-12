@@ -53,10 +53,8 @@ pub fn SignRSAPss(comptime RSAPssType: type, comptime name: []const u8) type {
         }
 
         pub fn verify(self: Self, msg: []const u8, signature: []u8, key: rsa.PublicKey) !bool {
-            _ = self;
-
             var verifier = RSAPssType.Signature.fromBytes(signature);
-            try verifier.verify(msg, key, .{
+            try verifier.verify(self.alloc, msg, key, .{
                 .salt_leng = rsa.pss_salt_length_auto,
             });
 
