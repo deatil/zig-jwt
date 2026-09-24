@@ -5,14 +5,14 @@ const hmac = std.crypto.auth.hmac;
 const Random = std.Random;
 const Allocator = std.mem.Allocator;
 
-pub const SigningHMD5 = SignHmac(hmac.HmacMd5, "HMD5");
-pub const SigningHSHA1 = SignHmac(hmac.HmacSha1, "HSHA1");
-pub const SigningHS224 = SignHmac(hmac.sha2.HmacSha224, "HS224");
-pub const SigningHS256 = SignHmac(hmac.sha2.HmacSha256, "HS256");
-pub const SigningHS384 = SignHmac(hmac.sha2.HmacSha384, "HS384");
-pub const SigningHS512 = SignHmac(hmac.sha2.HmacSha512, "HS512");
+pub const SigningHMD5 = SignHmac(hmac.HmacMd5, "HMD5", 16);
+pub const SigningHSHA1 = SignHmac(hmac.HmacSha1, "HSHA1", 20);
+pub const SigningHS224 = SignHmac(hmac.sha2.HmacSha224, "HS224", 28);
+pub const SigningHS256 = SignHmac(hmac.sha2.HmacSha256, "HS256", 32);
+pub const SigningHS384 = SignHmac(hmac.sha2.HmacSha384, "HS384", 48);
+pub const SigningHS512 = SignHmac(hmac.sha2.HmacSha512, "HS512", 64);
 
-pub fn SignHmac(comptime Hash: type, comptime name: []const u8) type {
+pub fn SignHmac(comptime Hash: type, comptime name: []const u8, size: isize) type {
     return struct {
         alloc: Allocator,
 
@@ -33,7 +33,7 @@ pub fn SignHmac(comptime Hash: type, comptime name: []const u8) type {
 
         pub fn signLength(self: Self) isize {
             _ = self;
-            return mac_length;
+            return size;
         }
 
         pub fn sign(self: Self, _: Random, msg: []const u8, key: []const u8) ![]u8 {
