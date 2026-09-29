@@ -153,11 +153,14 @@ The JWT library have signing methods:
 
  - `ES256`: jwt.SigningMethodES256
  - `ES384`: jwt.SigningMethodES384
-
  - `ES256K`: jwt.SigningMethodES256K
  
  - `EdDSA`: jwt.SigningMethodEdDSA
  - `ED25519`: jwt.SigningMethodED25519
+
+ - `ML-DSA-44`: jwt.SigningMethodMLDSA44
+ - `ML-DSA-65`: jwt.SigningMethodMLDSA65
+ - `ML-DSA-87`: jwt.SigningMethodMLDSA87
 
  - `HSHA1`: jwt.SigningMethodHSHA1
  - `HS224`: jwt.SigningMethodHS224
@@ -250,6 +253,47 @@ const public_key = try Ed25519.PublicKey.fromBytes(pub_key_bytes);
 // from der bytes
 const secret_key = try jwt.eddsa.parseSecretKeyDer(pri_key_bytes);
 const public_key = try jwt.eddsa.parsePublicKeyDer(pub_key_bytes);
+~~~
+
+MLDSA PublicKey:
+~~~zig
+const mldsa = std.crypto.sign.mldsa;
+
+var mldsa44_secret_key: mldsa.MLDSA44.SecretKey = undefined;
+var mldsa44_public_key: mldsa.MLDSA44.PublicKey = undefined;
+
+var mldsa65_secret_key: mldsa.MLDSA65.SecretKey = undefined;
+var mldsa65_public_key: mldsa.MLDSA65.PublicKey = undefined;
+
+var mldsa87_secret_key: mldsa.MLDSA87.SecretKey = undefined;
+var mldsa87_public_key: mldsa.MLDSA87.PublicKey = undefined;
+
+// generate MLDSA44 public key
+const mldsa44_kp = mldsa.MLDSA44.KeyPair.generate(io);
+// from plain bytes
+const mldsa44_secret_key = try mldsa.MLDSA44.SecretKey.fromBytes(pri_key_bytes);
+const mldsa44_public_key = try mldsa.MLDSA44.PublicKey.fromBytes(pub_key_bytes);
+// from der bytes
+const mldsa44_secret_key = try jwt.mldsa.ParseMLDSA44Der.parseSecretKeyDer(pri_key_bytes);
+const mldsa44_public_key = try jwt.mldsa.ParseMLDSA44Der.parsePublicKeyDer(pub_key_bytes);
+
+// generate MLDSA65 public key
+const mldsa65_kp = mldsa.MLDSA65.KeyPair.generate(io);
+// from plain bytes
+const mldsa65_secret_key = try mldsa.MLDSA65.SecretKey.fromBytes(pri_key_bytes);
+const mldsa65_public_key = try mldsa.MLDSA65.PublicKey.fromBytes(pub_key_bytes);
+// from der bytes
+const mldsa65_secret_key = try jwt.mldsa.ParseMLDSA65Der.parseSecretKeyDer(pri_key_bytes);
+const mldsa65_public_key = try jwt.mldsa.ParseMLDSA65Der.parsePublicKeyDer(pub_key_bytes);
+
+// generate MLDSA87 public key
+const mldsa87_kp = mldsa.MLDSA87.KeyPair.generate(io);
+// from plain bytes
+const mldsa87_secret_key = try mldsa.MLDSA87.SecretKey.fromBytes(pri_key_bytes);
+const mldsa87_public_key = try mldsa.MLDSA87.PublicKey.fromBytes(pub_key_bytes);
+// from der bytes
+const mldsa87_secret_key = try jwt.mldsa.ParseMLDSA87Der.parseSecretKeyDer(pri_key_bytes);
+const mldsa87_public_key = try jwt.mldsa.ParseMLDSA87Der.parsePublicKeyDer(pub_key_bytes);
 ~~~
 
 

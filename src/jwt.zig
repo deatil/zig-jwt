@@ -9,6 +9,7 @@ pub const rsa = @import("rsa.zig");
 pub const rsa_pss = @import("rsa_pss.zig");
 pub const ecdsa = @import("ecdsa.zig");
 pub const eddsa = @import("eddsa.zig");
+pub const mldsa = @import("mldsa.zig");
 pub const hmac = @import("hmac.zig");
 pub const blake2b = @import("blake2b.zig");
 pub const none = @import("none.zig");
@@ -40,6 +41,10 @@ pub const SigningMethodES256K = JWT(ecdsa.SigningES256K, ecdsa.ecdsa.EcdsaSecp25
 
 pub const SigningMethodEdDSA = JWT(eddsa.SigningEdDSA, eddsa.Ed25519.SecretKey, eddsa.Ed25519.PublicKey);
 pub const SigningMethodED25519 = JWT(eddsa.SigningED25519, eddsa.Ed25519.SecretKey, eddsa.Ed25519.PublicKey);
+
+pub const SigningMethodMLDSA44 = JWT(mldsa.SigningMLDSA44, mldsa.MLDSA44.SecretKey, mldsa.MLDSA44.PublicKey);
+pub const SigningMethodMLDSA65 = JWT(mldsa.SigningMLDSA65, mldsa.MLDSA65.SecretKey, mldsa.MLDSA65.PublicKey);
+pub const SigningMethodMLDSA87 = JWT(mldsa.SigningMLDSA87, mldsa.MLDSA87.SecretKey, mldsa.MLDSA87.PublicKey);
 
 pub const SigningMethodHMD5 = JWT(hmac.SigningHMD5, []const u8, []const u8);
 pub const SigningMethodHSHA1 = JWT(hmac.SigningHSHA1, []const u8, []const u8);
@@ -244,7 +249,6 @@ pub fn getSigningMethod(name: []const u8) !type {
     if (utils.eq(name, "ES384")) {
         return SigningMethodES384;
     }
-
     if (utils.eq(name, "ES256K")) {
         return SigningMethodES256K;
     }
@@ -254,6 +258,16 @@ pub fn getSigningMethod(name: []const u8) !type {
     }
     if (utils.eq(name, "ED25519")) {
         return SigningMethodED25519;
+    }
+
+    if (utils.eq(name, "MLDSA44")) {
+        return SigningMethodMLDSA44;
+    }
+    if (utils.eq(name, "MLDSA65")) {
+        return SigningMethodMLDSA65;
+    }
+    if (utils.eq(name, "MLDSA87")) {
+        return SigningMethodMLDSA87;
     }
 
     if (utils.eq(name, "HMD5")) {
