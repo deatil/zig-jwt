@@ -260,13 +260,13 @@ pub fn getSigningMethod(name: []const u8) !type {
         return SigningMethodED25519;
     }
 
-    if (utils.eq(name, "MLDSA44")) {
+    if (utils.eq(name, "ML-DSA-44")) {
         return SigningMethodMLDSA44;
     }
-    if (utils.eq(name, "MLDSA65")) {
+    if (utils.eq(name, "ML-DSA-65")) {
         return SigningMethodMLDSA65;
     }
-    if (utils.eq(name, "MLDSA87")) {
+    if (utils.eq(name, "ML-DSA-87")) {
         return SigningMethodMLDSA87;
     }
 

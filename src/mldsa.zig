@@ -67,13 +67,13 @@ pub fn SignMLDSA(comptime MLDSA: type, comptime name: []const u8) type {
     };
 }
 
-const oid_publickey_mldsa44 = "2.16.840.1.101.3.4.3.17";
-const oid_publickey_mldsa65 = "2.16.840.1.101.3.4.3.18";
-const oid_publickey_mldsa87 = "2.16.840.1.101.3.4.3.19";
+const oid_mldsa44_publickey = "2.16.840.1.101.3.4.3.17";
+const oid_mldsa65_publickey = "2.16.840.1.101.3.4.3.18";
+const oid_mldsa87_publickey = "2.16.840.1.101.3.4.3.19";
 
-pub const ParseMLDSA44Der = ParseKeyDer(mldsa.MLDSA44, CheckOid(oid_publickey_mldsa44));
-pub const ParseMLDSA65Der = ParseKeyDer(mldsa.MLDSA65, CheckOid(oid_publickey_mldsa65));
-pub const ParseMLDSA87Der = ParseKeyDer(mldsa.MLDSA87, CheckOid(oid_publickey_mldsa87));
+pub const ParseMLDSA44Der = ParseKeyDer(mldsa.MLDSA44, CheckOid(oid_mldsa44_publickey));
+pub const ParseMLDSA65Der = ParseKeyDer(mldsa.MLDSA65, CheckOid(oid_mldsa65_publickey));
+pub const ParseMLDSA87Der = ParseKeyDer(mldsa.MLDSA87, CheckOid(oid_mldsa87_publickey));
 
 /// check publickey OID
 pub fn CheckOid(comptime publickey_oid: []const u8) type {
@@ -129,8 +129,8 @@ pub fn ParseKeyDer(comptime MLDSA: type, comptime CheckOidFn: type) type {
             try CheckOidFn.check(oid);
 
             parser.seek(oid_seq.slice.end);
-            const prikey_octet = try parser.expect(.universal, false, .octetstring);
 
+            const prikey_octet = try parser.expect(.universal, false, .octetstring);
             const parse_prikey_bytes = parser.view(prikey_octet);
 
             if (parse_prikey_bytes[0] != 0x80) {

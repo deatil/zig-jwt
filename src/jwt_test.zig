@@ -26,9 +26,9 @@ test "getSigningMethod" {
     try testing.expectEqual(jwt.SigningMethodEdDSA, try jwt.getSigningMethod("EdDSA"));
     try testing.expectEqual(jwt.SigningMethodED25519, try jwt.getSigningMethod("ED25519"));
 
-    try testing.expectEqual(jwt.SigningMethodMLDSA44, try jwt.getSigningMethod("MLDSA44"));
-    try testing.expectEqual(jwt.SigningMethodMLDSA65, try jwt.getSigningMethod("MLDSA65"));
-    try testing.expectEqual(jwt.SigningMethodMLDSA87, try jwt.getSigningMethod("MLDSA87"));
+    try testing.expectEqual(jwt.SigningMethodMLDSA44, try jwt.getSigningMethod("ML-DSA-44"));
+    try testing.expectEqual(jwt.SigningMethodMLDSA65, try jwt.getSigningMethod("ML-DSA-65"));
+    try testing.expectEqual(jwt.SigningMethodMLDSA87, try jwt.getSigningMethod("ML-DSA-87"));
 
     try testing.expectEqual(jwt.SigningMethodHMD5, try jwt.getSigningMethod("HMD5"));
     try testing.expectEqual(jwt.SigningMethodHSHA1, try jwt.getSigningMethod("HSHA1"));
@@ -1809,6 +1809,43 @@ test "SigningMethodMLDSA87 Check" {
     try testing.expectError(error.JWTVerifyFail, parsed2);
 }
 
+test "SigningMethodMLDSA44 with der key" {
+    const alloc = testing.allocator;
+
+    const prikey = "MDQCAQAwCwYJYIZIAWUDBAMRBCKAIPBmiRIBWe97N3Ilbp37aFah7jNzvMbhJsWqviXrcfzP";
+    const pubkey = "MIIFMjALBglghkgBZQMEAxEDggUhACy1v7qduwKMRYFy3xwYzRCOX00e64AHP/psTVfYeJVIFemX6CIiyXwV6qCanbT6hLfQqMs6+G3OZBjEj5zLvS6Eu/iAE2x445rmGBe3iHdLpJiwyRe1xg6L4CGEqjd8vwVaTI/jCruH7hAx6VbtnjZQcwnW5uC23UIuFje16NvgTMNzntf3OEaKeu34KsWcXhl5FBjcZUGJlEYE6+WRcT8/1RukCE4o1OqMEspj88l0VkMclNn+kdeZAhwh8hAle8u+VrvUZqX+Wr6sySXysPbXjK7s2vYZOIaiWj8rvjcdoHdHgkWFjq82BnSkvL2X5pQvW+XGj4pNMFOWH8hHEqPABe3xyBJL+4EO4mVl1A7PfYLxE1zqoTZB+Zccti4B5dPYZvw6jNYHbeTOhREVKsFzgJ+YsKbYictUZpdl8bZwCGXGPssSvcXF9HDEC42pwNK1niyz1pERZS6lAJMYflT64mkuwKPsWnZzVIG3VkVRdtsbRjzb6rmGFKk5H0GBxadpt0RIC++csBVTcDQhRrJck204BMpPrVycSRFhzfu35n3i1Yow39H3dyrr0odSaVYVhA3lOXoofcswlz68SIOkab/jiqz4Ts6X2UPtgCJlxa0B/Bkq+7siYvDIL1iOykJwPunWILtw6bFzFsnDwxbvjOzbff1Jfkv7J284UiO95cbvgtkEij8aJQN56zAcoxfs4X5pYGiNPpYePRrMNYZqndl3+if9bdkh66lRVDUxeMJY29vSXuFaojHEebyJMrBpwZeoUBJJYzTol2He0+g9u6d1inbjlVT+9E/XP0lEkKfUhdkdyLM9x19YdxcFx99HLz5KOuy/B1kbru8Xs+GVuyveVzwNWsyfZ13wljKTtdpU2tDn6jlS3KJ7Dt5QtQfHXirncwNWTGUPk2E5ZTRMgtRhUyXoK+y0adVSmzPvBn+hPoO5uR4zPpIMXdIuPyv9wVknVbch3txLrkNIPf8NZ+YyQvgki8AasIep3zq8B0amVs4F9c9mKSAuGwXRNtmjHiWsfFZ7CS4BjiRNXTnT8iLH1tSRl4nMoZVGLntsgpGPYH+d/xYRWAxOZKD++tpNGGM0iVqBwqQM6OwiqT4vhx6GQFObEb8alvTfvT6hQ/BBUnVjT5YF4L46hphJ+iW9/cBVgWdkGkbYUvbxsk3wTuqsj7J4mdggLqqwCAcNFdLu/9Qw40t83rZXSYESK91d2oeZTTvCUqcTedI31ZEs8gbTMZfjfAOZ1+S4H3ZtWS16+CclOP5DpTaxcNmTkz8Mo8wAhRV699Gt6FYaEhZWzmpNRcnnflRu0tjT+SvvIv6HgJr6NsLtio41+31aJuKh9AV2BG2Udmo0CW2GJCYvDxEjzxEgRLZXgD3OvZrnkXg1Zx+Ww6sdLpqITZkiT6GkJWkpLxVWktIr5qrz2YTL5kCu+stxfafzEc4tyETlNrZ18F/BLIzYmJvYNB/A3nK3ftEFSyDhy2b+INumOWJzD96uecv0uysnWMP92vvMit8B5/d90esXr2qrTYs5CAiJmQbA+n25J+5VIc6jFTWIV4gO668EK4FLhNldKjrHB/fh8BfVQU+Qfmz2XKH+VPjyulbSI/cthvY6c794e6DOrPg3O6jOGp1MFVsfMcw/pXHORkapnOWsKpgaezLQEVUiRWhcxRKwSPPj0C4m9bO17MufszVsxAOmworZNNVd5CeKwC1LV/plg6fhSWhfkqycXQIu8013n5Gviit5+FY=";
+
+    const prikey_bytes = try jwt.utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try jwt.utils.base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
+
+    const secret_key = try jwt.mldsa.ParseMLDSA44Der.parseSecretKeyDer(prikey_bytes);
+    const public_key = try jwt.mldsa.ParseMLDSA44Der.parsePublicKeyDer(pubkey_bytes);
+
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+
+    const s = jwt.SigningMethodMLDSA44.init(alloc);
+    const token_string = try s.sign(random, claims, secret_key);
+    defer alloc.free(token_string);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = jwt.SigningMethodMLDSA44.init(alloc);
+    var parsed = try p.parse(token_string, public_key);
+    defer parsed.deinit();
+
+    const claims2 = try parsed.getClaims();
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
+}
+
 test "SigningMethodMLDSA65 with der key" {
     const alloc = testing.allocator;
 
@@ -1837,6 +1874,43 @@ test "SigningMethodMLDSA65 with der key" {
     // ==========
 
     const p = jwt.SigningMethodMLDSA65.init(alloc);
+    var parsed = try p.parse(token_string, public_key);
+    defer parsed.deinit();
+
+    const claims2 = try parsed.getClaims();
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
+}
+
+test "SigningMethodMLDSA87 with der key" {
+    const alloc = testing.allocator;
+
+    const prikey = "MDQCAQAwCwYJYIZIAWUDBAMTBCKAIJyDndFRrRdpmTm4biGGzJGW6DGvhGkkDnGdRnsu6kFm";
+    const pubkey = "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";
+
+    const prikey_bytes = try jwt.utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try jwt.utils.base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
+
+    const secret_key = try jwt.mldsa.ParseMLDSA87Der.parseSecretKeyDer(prikey_bytes);
+    const public_key = try jwt.mldsa.ParseMLDSA87Der.parsePublicKeyDer(pubkey_bytes);
+
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+
+    const s = jwt.SigningMethodMLDSA87.init(alloc);
+    const token_string = try s.sign(random, claims, secret_key);
+    defer alloc.free(token_string);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    const p = jwt.SigningMethodMLDSA87.init(alloc);
     var parsed = try p.parse(token_string, public_key);
     defer parsed.deinit();
 
