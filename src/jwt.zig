@@ -95,24 +95,25 @@ pub const Error = error{
     JWTAlgoInvalid,
 };
 
+var prng = Random.DefaultPrng.init(12345678);
+const defaultRandom = prng.random();
+
 pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKeyType: type) type {
     const BuilderType = builder.Builder(Signer, SignKeyType);
 
     return struct {
-        signer: Signer,
         alloc: Allocator,
+        random: Random, 
+        signer: Signer,
 
         const Self = @This();
 
         pub fn init(alloc: Allocator) Self {
             return .{
-                .signer = Signer.init(alloc),
                 .alloc = alloc,
+                .random = defaultRandom,
+                .signer = Signer.init(alloc),
             };
-        }
-
-        pub fn getSigner(self: Self) Signer {
-            return self.signer;
         }
 
         pub fn alg(self: Self) []const u8 {
@@ -123,18 +124,26 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
             return self.signer.signLength();
         }
 
+        pub fn getSigner(self: Self) Signer {
+            return self.signer;
+        }
+
+        pub fn withRandom(self: *Self, random: Random) void {
+            self.random = random;
+        }
+
         // use SigningMethod to make token
-        pub fn sign(self: Self, random: Random, claims: anytype, sign_key: SignKeyType) ![]const u8 {
+        pub fn sign(self: *Self, claims: anytype, sign_key: SignKeyType) ![]const u8 {
             const header = .{
                 .typ = "JWT",
                 .alg = self.signer.alg(),
             };
 
-            return self.signWithHeader(random, header, claims, sign_key);
+            return self.signWithHeader(header, claims, sign_key);
         }
 
         // use SigningMethod with header to make token
-        pub fn signWithHeader(self: Self, random: Random, header: anytype, claims: anytype, sign_key: SignKeyType) ![]const u8 {
+        pub fn signWithHeader(self: *Self, header: anytype, claims: anytype, sign_key: SignKeyType) ![]const u8 {
             var t = Token.init(self.alloc);
             try t.setHeader(header);
             try t.setClaims(claims);
@@ -144,7 +153,7 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
             const signing_string = try t.signingString();
             defer self.alloc.free(signing_string);
 
-            const signature = try self.signer.sign(random, signing_string, sign_key);
+            const signature = try self.signer.sign(self.random, signing_string, sign_key);
             defer self.alloc.free(signature);
 
             try t.withSignature(signature);
@@ -153,7 +162,7 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
         }
 
         // parse token and token signature verify
-        pub fn parse(self: Self, token_string: []const u8, verify_key: VerifyKeyType) !Token {
+        pub fn parse(self: *Self, token_string: []const u8, verify_key: VerifyKeyType) !Token {
             var t = Token.init(self.alloc);
             t.parse(token_string);
 
@@ -210,14 +219,15 @@ pub fn JWT(comptime Signer: type, comptime SignKeyType: type, comptime VerifyKey
 
 // use SigningMethod to make token
 pub fn sign(comptime T: type, alloc: Allocator, random: Random, SigningMethod: type, claims: anytype, key: T) ![]const u8 {
-    const s = SigningMethod.init(alloc);
-    const token_string = try s.sign(random, claims, key);
+    var s = SigningMethod.init(alloc);
+    s.withRandom(random);
+    const token_string = try s.sign(claims, key);
     return token_string;
 }
 
 // parse token and token signature verify
 pub fn parse(comptime T: type, alloc: Allocator, SigningMethod: type, token_string: []const u8, key: T) !Token {
-    const p = SigningMethod.init(alloc);
+    var p = SigningMethod.init(alloc);
     const parsed = try p.parse(token_string, key);
     return parsed;
 }
