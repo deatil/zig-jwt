@@ -3,7 +3,7 @@
     .description = "A JWT (JSON Web Token) library for zig.",
     .version = "1.7.5",
     .fingerprint = 0x30a5aec248bd7ac3,
-    .minimum_zig_version = "0.17.0-dev.2338+b46a7f3a2",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .@"zig-rsa" = .{
             .url = "git+https://github.com/deatil/zig-rsa?ref=main#a9bc871c3c0b04a7a6a651ec020c7708da2f6990",

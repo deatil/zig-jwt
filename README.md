@@ -5,7 +5,7 @@ A JWT (JSON Web Token) library for zig.
 
 ### Env
 
- - Zig >= 0.16.0
+ - Zig >= 0.17.0
 
 
 ### What the heck is a JWT?
@@ -79,18 +79,25 @@ pub fn main(init: std.process.Init) !void {
         .sub = "foo",
     };
 
-    const s = jwt.SigningMethodEdDSA.init(alloc);
-    const token_string = try s.sign(random, claims, kp.secret_key);
+    var s = jwt.SigningMethodEdDSA.init(alloc);
 
+    // need rand: PS256, PS384, PS512
+    // const random = (std.Random.IoSource{
+    //    .io = init.io,
+    // }).interface();
+
+    // s.withRandom(random);
+
+    const token_string = try s.sign(claims, kp.secret_key);
     defer alloc.free(token_string);
     
     // output: 
     // make jwt: eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSJ9.eyJhdWQiOiJleGFtcGxlLmNvbSIsInN1YiI6ImZvbyJ9.8aYTV-9_Z1RQUPepUlut9gvniX_Cx_z8P60Z5FbnMMgNLPNP29ZtNG3k6pcU2TY_O3DkSsdxbN2HkmgvjDUPBg
     std.debug.print("make jwt: {s} \n", .{token_string});
 
-    const p = jwt.SigningMethodEdDSA.init(alloc);
-    var token = try p.parse(token_string, kp.public_key);
+    var p = jwt.SigningMethodEdDSA.init(alloc);
 
+    var token = try p.parse(token_string, kp.public_key);
     defer token.deinit();
     
     // output: 
