@@ -1,14 +1,14 @@
 const std = @import("std");
 const testing = std.testing;
+const ecdsa = std.crypto.sign.ecdsa;
 const Random = std.Random;
 const Allocator = std.mem.Allocator;
 
-pub const ecdsa = std.crypto.sign.ecdsa;
-
 const rsa = @import("zig-rsa");
-pub const der = rsa.der;
-pub const oids = rsa.oids;
-pub const utils = @import("utils.zig");
+const utils = @import("utils.zig");
+
+const der = rsa.der;
+const oids = rsa.oids;
 
 pub const zig_ecdsa = @import("zig-ecdsa");
 

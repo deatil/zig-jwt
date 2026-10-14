@@ -6,8 +6,8 @@ const hash_sha2 = std.crypto.hash.sha2;
 const Random = std.Random;
 const Allocator = std.mem.Allocator;
 
-pub const rsa = @import("zig-rsa");
-pub const utils = @import("utils.zig");
+const rsa = @import("zig-rsa");
+const utils = @import("utils.zig");
 
 pub const RsaSha256 = rsa.PKCS1v15(hash_sha2.Sha256);
 pub const RsaSha384 = rsa.PKCS1v15(hash_sha2.Sha384);

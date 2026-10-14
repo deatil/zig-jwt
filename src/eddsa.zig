@@ -4,9 +4,10 @@ const Random = std.Random;
 const Allocator = std.mem.Allocator;
 
 const rsa = @import("zig-rsa");
-pub const der = rsa.der;
-pub const oids = rsa.oids;
-pub const utils = @import("utils.zig");
+const utils = @import("utils.zig");
+
+const der = rsa.der;
+const oids = rsa.oids;
 
 pub const Ed25519 = std.crypto.sign.Ed25519;
 
