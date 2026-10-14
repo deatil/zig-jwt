@@ -708,6 +708,22 @@ test "SigningMethodES512 Check" {
     try testing.expectEqualStrings(claims.foo, claims2.value.object.get("foo").?.string);
 }
 
+test "SigningMethodES512 Check fail" {
+    const alloc = testing.allocator;
+
+    const pubkey = "MIGbMBAGByqGSM49AgEGBSuBBAAjA4GGAAQB5SlzIESgK4L2JngDSaRUmzpQ+dRqVP450M4VqKJo7+DE/1K8+LU85DGNYFjSKTBTWCs3M3U+kFnGgr2MfNHzdtAAsGWEKQ4W+JQKN6yqLz1OcAc8BnzAzF91mGjwoJURLpNZldd0y1ucbL9EmyjqB0LmhokPFW9ltEEMEvInnLkEKvI=";
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+    defer alloc.free(pubkey_bytes);
+
+    const public_key = try jwt.ecdsa.ParseP521Sha512Der.parsePublicKeyDer(pubkey_bytes);
+
+    const token_str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzUxMiJ9.eyJmb28iOiJiYXIifQ.AdHc_BALB2aBPnEl0FLQtOLgJLqmbxgF9npNd19TZTYwqHmZZ0_eizbagmjJVxpImzXSi-DYezLQDbwN_4iJrvlxAILX9SSrsHh0zbkJAjMAIJDMkZ7nfR7KgCNqvyT7JgEN41i6juk1n8uP3edFptYa1QxnLEG4v6_-NJdOl1xQVtZ8";
+
+    var p = jwt.SigningMethodES512.init(alloc);
+    const res = p.parse(token_str, public_key);
+    try testing.expectError(jwt.Error.JWTVerifyFail, res);
+}
+
 test "SigningMethodEdDSA Check" {
     const alloc = testing.allocator;
 
