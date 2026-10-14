@@ -2,6 +2,7 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
 
     const mod = b.addModule("zig-jwt", .{
         .root_source_file = b.path("src/jwt.zig"),
@@ -12,6 +13,13 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
     mod.addImport("zig-rsa", zig_rsa_dep.module("zig-rsa"));
+
+    const ecdsa_mod = b.createModule(.{
+        .root_source_file = b.path("pkg/ecdsa/ecdsa.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    mod.addImport("zig-ecdsa", ecdsa_mod);
 
     // -Dtest-filter="..."
     const test_filter = b.option([]const []const u8, "test-filter", "Filter for tests to run");

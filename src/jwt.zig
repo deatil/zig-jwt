@@ -35,8 +35,7 @@ pub const SigningMethodPS512 = JWT(rsa_pss.SigningPS512, crypto_rsa.SecretKey, c
 
 pub const SigningMethodES256 = JWT(ecdsa.SigningES256, ecdsa.ecdsa.EcdsaP256Sha256.SecretKey, ecdsa.ecdsa.EcdsaP256Sha256.PublicKey);
 pub const SigningMethodES384 = JWT(ecdsa.SigningES384, ecdsa.ecdsa.EcdsaP384Sha384.SecretKey, ecdsa.ecdsa.EcdsaP384Sha384.PublicKey);
-// pub const SigningMethodES512 = JWT(ecdsa.SigningES512, ecdsa.ecdsa.EcdsaP521Sha512.SecretKey, ecdsa.ecdsa.EcdsaP521Sha512.PublicKey);
-
+pub const SigningMethodES512 = JWT(ecdsa.SigningES512, ecdsa.EcdsaP521Sha512.SecretKey, ecdsa.EcdsaP521Sha512.PublicKey);
 pub const SigningMethodES256K = JWT(ecdsa.SigningES256K, ecdsa.ecdsa.EcdsaSecp256k1Sha256.SecretKey, ecdsa.ecdsa.EcdsaSecp256k1Sha256.PublicKey);
 
 pub const SigningMethodEdDSA = JWT(eddsa.SigningEdDSA, eddsa.Ed25519.SecretKey, eddsa.Ed25519.PublicKey);
@@ -258,6 +257,9 @@ pub fn getSigningMethod(name: []const u8) !type {
     }
     if (utils.eq(name, "ES384")) {
         return SigningMethodES384;
+    }
+    if (utils.eq(name, "ES512")) {
+        return SigningMethodES512;
     }
     if (utils.eq(name, "ES256K")) {
         return SigningMethodES256K;

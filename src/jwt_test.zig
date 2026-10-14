@@ -5,6 +5,7 @@ const testing = std.testing;
 const Random = std.Random;
 
 const jwt = @import("jwt.zig");
+const utils = @import("utils.zig");
 
 const random = (Random.IoSource{
     .io = testing.io,
@@ -21,6 +22,7 @@ test "getSigningMethod" {
 
     try testing.expectEqual(jwt.SigningMethodES256, try jwt.getSigningMethod("ES256"));
     try testing.expectEqual(jwt.SigningMethodES384, try jwt.getSigningMethod("ES384"));
+    try testing.expectEqual(jwt.SigningMethodES512, try jwt.getSigningMethod("ES512"));
     try testing.expectEqual(jwt.SigningMethodES256K, try jwt.getSigningMethod("ES256K"));
 
     try testing.expectEqual(jwt.SigningMethodEdDSA, try jwt.getSigningMethod("EdDSA"));
@@ -61,7 +63,7 @@ test "parse JWTTypeInvalid" {
 test "parse JWTSignatureInvalid" {
     const alloc = testing.allocator;
 
-    const kp = jwt.ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate(testing.io);
+    const kp = jwt.ecdsa.EcdsaP256Sha256.KeyPair.generate(testing.io);
 
     const token_string = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJhdWQiOiJleGFtcGxlLmNvbSIsImlhdCI6ImZvbyJ9.dGVzdC1zaWduYXR1cmU";
 
@@ -212,7 +214,7 @@ test "SigningMethodEdDSA" {
 test "SigningMethodES256" {
     const alloc = testing.allocator;
 
-    const kp = jwt.ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate(testing.io);
+    const kp = jwt.ecdsa.EcdsaP256Sha256.KeyPair.generate(testing.io);
 
     const claims = .{
         .aud = "example.com",
@@ -239,7 +241,7 @@ test "SigningMethodES256" {
 test "SigningMethodES384" {
     const alloc = testing.allocator;
 
-    const kp = jwt.ecdsa.ecdsa.EcdsaP384Sha384.KeyPair.generate(testing.io);
+    const kp = jwt.ecdsa.EcdsaP384Sha384.KeyPair.generate(testing.io);
 
     const claims = .{
         .aud = "example.com",
@@ -263,10 +265,37 @@ test "SigningMethodES384" {
     try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
 }
 
+test "SigningMethodES512" {
+    const alloc = testing.allocator;
+
+    const kp = jwt.ecdsa.EcdsaP521Sha512.KeyPair.generate(testing.io);
+
+    const claims = .{
+        .aud = "example.com",
+        .sub = "foo",
+    };
+
+    var s = jwt.SigningMethodES512.init(alloc);
+    const token_string = try s.sign(claims, kp.secret_key);
+    defer alloc.free(token_string);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    var p = jwt.SigningMethodES512.init(alloc);
+    var parsed = try p.parse(token_string, kp.public_key);
+    defer parsed.deinit();
+
+    const claims2 = try parsed.getClaims();
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.sub, claims2.value.object.get("sub").?.string);
+}
+
 test "SigningMethodES256K" {
     const alloc = testing.allocator;
 
-    const kp = jwt.ecdsa.ecdsa.EcdsaSecp256k1Sha256.KeyPair.generate(testing.io);
+    const kp = jwt.ecdsa.EcdsaSecp256k1Sha256.KeyPair.generate(testing.io);
 
     const claims = .{
         .aud = "example.com",
@@ -518,7 +547,7 @@ test "SigningMethodES256 Check" {
     const pri_key = "603e7857fbe9fb9e0ff435daad8ab1e0c3dc9be1ca44843335ab184a84501d0f";
     const token_str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.feG39E-bn8HXAKhzDZq7yEAPWYDhZlwTn3sePJnU9VrGMmwdXAIEyoOnrjreYlVM_Z4N13eK9-TmMTWyfKJtHQ";
 
-    const encoded_length = jwt.ecdsa.ecdsa.EcdsaP256Sha256.SecretKey.encoded_length;
+    const encoded_length = jwt.ecdsa.EcdsaP256Sha256.SecretKey.encoded_length;
 
     var pri_key_buf: [encoded_length]u8 = undefined;
     _ = try fmt.hexToBytes(&pri_key_buf, pri_key);
@@ -526,8 +555,8 @@ test "SigningMethodES256 Check" {
     var pub_key_buf: [pub_key.len / 2]u8 = undefined;
     const pub_key_bytes = try fmt.hexToBytes(&pub_key_buf, pub_key);
 
-    const secret_key = try jwt.ecdsa.ecdsa.EcdsaP256Sha256.SecretKey.fromBytes(pri_key_buf);
-    const public_key = try jwt.ecdsa.ecdsa.EcdsaP256Sha256.PublicKey.fromSec1(pub_key_bytes);
+    const secret_key = try jwt.ecdsa.EcdsaP256Sha256.SecretKey.fromBytes(pri_key_buf);
+    const public_key = try jwt.ecdsa.EcdsaP256Sha256.PublicKey.fromSec1(pub_key_bytes);
 
     const claims = .{
         .foo = "bar",
@@ -556,7 +585,7 @@ test "SigningMethodES384 Check" {
     const pri_key = "d86bbac9694edf78b32aac0c7a69d6453503a96941ff53295b64bae238b38de58155c2d554a4ed457c45d9508429a6d4";
     const token_str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzM4NCJ9.eyJmb28iOiJiYXIifQ.ngAfKMbJUh0WWubSIYe5GMsA-aHNKwFbJk_wq3lq23aPp8H2anb1rRILIzVR0gUf4a8WzDtrzmiikuPWyCS6CN4-PwdgTk-5nehC7JXqlaBZU05p3toM3nWCwm_LXcld";
 
-    const encoded_length = jwt.ecdsa.ecdsa.EcdsaP384Sha384.SecretKey.encoded_length;
+    const encoded_length = jwt.ecdsa.EcdsaP384Sha384.SecretKey.encoded_length;
 
     var pri_key_buf: [encoded_length]u8 = undefined;
     _ = try fmt.hexToBytes(&pri_key_buf, pri_key);
@@ -564,8 +593,8 @@ test "SigningMethodES384 Check" {
     var pub_key_buf: [pub_key.len / 2]u8 = undefined;
     const pub_key_bytes = try fmt.hexToBytes(&pub_key_buf, pub_key);
 
-    const secret_key = try jwt.ecdsa.ecdsa.EcdsaP384Sha384.SecretKey.fromBytes(pri_key_buf);
-    const public_key = try jwt.ecdsa.ecdsa.EcdsaP384Sha384.PublicKey.fromSec1(pub_key_bytes);
+    const secret_key = try jwt.ecdsa.EcdsaP384Sha384.SecretKey.fromBytes(pri_key_buf);
+    const public_key = try jwt.ecdsa.EcdsaP384Sha384.PublicKey.fromSec1(pub_key_bytes);
 
     const claims = .{
         .foo = "bar",
@@ -596,7 +625,7 @@ test "SigningMethodES256 Check fail" {
     var pub_key_buf: [pub_key.len / 2]u8 = undefined;
     const pub_key_bytes = try fmt.hexToBytes(&pub_key_buf, pub_key);
 
-    const public_key = try jwt.ecdsa.ecdsa.EcdsaP256Sha256.PublicKey.fromSec1(pub_key_bytes);
+    const public_key = try jwt.ecdsa.EcdsaP256Sha256.PublicKey.fromSec1(pub_key_bytes);
 
     var p = jwt.SigningMethodES256.init(alloc);
 
@@ -611,7 +640,7 @@ test "SigningMethodES256K Check" {
     const pri_key = "c4e29dedecf2d4fef1bb300cce3fcfca3ec086066fd3d03ebc3cc7a36ee900dd";
     const token_str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NksifQ.eyJmb28iOiJiYXIifQ.Xe92dmU8MrI1d4edE2LEKqSmObZJpkIuz0fERihfn65ikTeeX5zjpyAdlHy9ZSBX8N8sqmJy5fxBTBzV26WvIQ";
 
-    const encoded_length = jwt.ecdsa.ecdsa.EcdsaSecp256k1Sha256.SecretKey.encoded_length;
+    const encoded_length = jwt.ecdsa.EcdsaSecp256k1Sha256.SecretKey.encoded_length;
 
     var pri_key_buf: [encoded_length]u8 = undefined;
     _ = try fmt.hexToBytes(&pri_key_buf, pri_key);
@@ -619,8 +648,8 @@ test "SigningMethodES256K Check" {
     var pub_key_buf: [pub_key.len / 2]u8 = undefined;
     const pub_key_bytes = try fmt.hexToBytes(&pub_key_buf, pub_key);
 
-    const secret_key = try jwt.ecdsa.ecdsa.EcdsaSecp256k1Sha256.SecretKey.fromBytes(pri_key_buf);
-    const public_key = try jwt.ecdsa.ecdsa.EcdsaSecp256k1Sha256.PublicKey.fromSec1(pub_key_bytes);
+    const secret_key = try jwt.ecdsa.EcdsaSecp256k1Sha256.SecretKey.fromBytes(pri_key_buf);
+    const public_key = try jwt.ecdsa.EcdsaSecp256k1Sha256.PublicKey.fromSec1(pub_key_bytes);
 
     const claims = .{
         .foo = "bar",
@@ -634,6 +663,43 @@ test "SigningMethodES256K Check" {
     // ==========
 
     var p = jwt.SigningMethodES256K.init(alloc);
+    var parsed = try p.parse(token_str, public_key);
+    defer parsed.deinit();
+
+    const claims2 = try parsed.getClaims();
+    defer claims2.deinit();
+    try testing.expectEqualStrings(claims.foo, claims2.value.object.get("foo").?.string);
+}
+
+test "SigningMethodES512 Check" {
+    const alloc = testing.allocator;
+
+    const prikey = "MIH3AgEAMBAGByqGSM49AgEGBSuBBAAjBIHfMIHcAgEBBEIAyYKP3zmWUSvKgv9BYFSQ8SNvCUWQ+ac4o8xxVxQ0xJJYi5r86HoOcPafRhA08FpL5QsbH09t7SIb4/u3SRoaHamgBwYFK4EEACOhgYkDgYYABAHlKXMgRKArgvYmeANJpFSbOlD51GpU/jnQzhWoomjv4MT/Urz4tTzkMY1gWNIpMFNYKzczdT6QWcaCvYx80fN20ACwZYQpDhb4lAo3rKovPU5wBzwGfMDMX3WYaPCglREuk1mV13TLW5xsv0SbKOoHQuaGiQ8Vb2W0QQwS8iecuQQq8g==";
+    const pubkey = "MIGbMBAGByqGSM49AgEGBSuBBAAjA4GGAAQB5SlzIESgK4L2JngDSaRUmzpQ+dRqVP450M4VqKJo7+DE/1K8+LU85DGNYFjSKTBTWCs3M3U+kFnGgr2MfNHzdtAAsGWEKQ4W+JQKN6yqLz1OcAc8BnzAzF91mGjwoJURLpNZldd0y1ucbL9EmyjqB0LmhokPFW9ltEEMEvInnLkEKvI=";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
+
+    const secret_key = try jwt.ecdsa.ParseP521Sha512Der.parseSecretKeyDerAuto(prikey_bytes);
+    const public_key = try jwt.ecdsa.ParseP521Sha512Der.parsePublicKeyDer(pubkey_bytes);
+
+    const token_str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzUxMiJ9.eyJmb28iOiJiYXIifQ.AdHc_BALB2aBPnEl0FLQtOLgJLqmbxgF9npNd19TZTYwqHmZZ0_eizbagmjJVxpImzXSi-DYezLQDbwN_4iJrvlxAILX9SSrsHh0zbkJAjMAIJDMkZ7nfR7KgCNqvyT7JgEN41i6juk1n8uP3edFptYa1QxnLEG4v6_-NJdOl1xQVtZA";
+
+    const claims = .{
+        .foo = "bar",
+    };
+
+    var s = jwt.SigningMethodES512.init(alloc);
+    const token_string = try s.sign(claims, secret_key);
+    defer alloc.free(token_string);
+    try testing.expectEqual(true, token_string.len > 0);
+
+    // ==========
+
+    var p = jwt.SigningMethodES512.init(alloc);
     var parsed = try p.parse(token_str, public_key);
     defer parsed.deinit();
 
@@ -868,7 +934,7 @@ test "getTokenHeader" {
 test "SigningMethodES256 with JWTClaims" {
     const alloc = testing.allocator;
 
-    const kp = jwt.ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate(testing.io);
+    const kp = jwt.ecdsa.EcdsaP256Sha256.KeyPair.generate(testing.io);
 
     const claims: jwt.JWTClaims = .{
         .aud = "example.com",
@@ -1480,7 +1546,7 @@ test "SigningMethodEdDSA JWTTypeInvalid" {
 test "SigningMethodEdDSA JWTAlgoInvalid" {
     const alloc = testing.allocator;
 
-    const kp = jwt.ecdsa.ecdsa.EcdsaP256Sha256.KeyPair.generate(testing.io);
+    const kp = jwt.ecdsa.EcdsaP256Sha256.KeyPair.generate(testing.io);
 
     const headers = .{
         .typ = "JWT",

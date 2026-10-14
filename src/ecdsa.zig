@@ -10,11 +10,17 @@ pub const der = rsa.der;
 pub const oids = rsa.oids;
 pub const utils = @import("utils.zig");
 
-pub const SigningES256 = SignECDSA(ecdsa.EcdsaP256Sha256, "ES256");
-pub const SigningES384 = SignECDSA(ecdsa.EcdsaP384Sha384, "ES384");
-// pub const SigningES512 = SignECDSA(ecdsa.EcdsaP521Sha512, "ES512");
+pub const zig_ecdsa = @import("zig-ecdsa");
 
-pub const SigningES256K = SignECDSA(ecdsa.EcdsaSecp256k1Sha256, "ES256K");
+pub const EcdsaP256Sha256 = ecdsa.EcdsaP256Sha256;
+pub const EcdsaP384Sha384 = ecdsa.EcdsaP384Sha384;
+pub const EcdsaP521Sha512 = zig_ecdsa.EcdsaP521Sha512;
+pub const EcdsaSecp256k1Sha256 = ecdsa.EcdsaSecp256k1Sha256;
+
+pub const SigningES256 = SignECDSA(EcdsaP256Sha256, "ES256");
+pub const SigningES384 = SignECDSA(EcdsaP384Sha384, "ES384");
+pub const SigningES512 = SignECDSA(EcdsaP521Sha512, "ES512");
+pub const SigningES256K = SignECDSA(EcdsaSecp256k1Sha256, "ES256K");
 
 pub fn SignECDSA(comptime EC: type, comptime name: []const u8) type {
     return struct {
@@ -72,11 +78,10 @@ const oid_ecdsa_p384_namedcurve = "1.3.132.0.34";
 const oid_ecdsa_p521_namedcurve = "1.3.132.0.35";
 const oid_ecdsa_s256_namedcurve = "1.3.132.0.10";
 
-pub const ParseP256Sha256Der = ParseKeyDer(ecdsa.EcdsaP256Sha256, CheckOid(oid_ecdsa_p256_namedcurve));
-pub const ParseP384Sha384Der = ParseKeyDer(ecdsa.EcdsaP384Sha384, CheckOid(oid_ecdsa_p384_namedcurve));
-// pub const ParseP521Sha512Der = ParseKeyDer(ecdsa.EcdsaP521Sha512, CheckOid(oid_ecdsa_p521_namedcurve));
-
-pub const ParseSecp256k1Sha256Der = ParseKeyDer(ecdsa.EcdsaSecp256k1Sha256, CheckOid(oid_ecdsa_s256_namedcurve));
+pub const ParseP256Sha256Der = ParseKeyDer(EcdsaP256Sha256, CheckOid(oid_ecdsa_p256_namedcurve));
+pub const ParseP384Sha384Der = ParseKeyDer(EcdsaP384Sha384, CheckOid(oid_ecdsa_p384_namedcurve));
+pub const ParseP521Sha512Der = ParseKeyDer(EcdsaP521Sha512, CheckOid(oid_ecdsa_p521_namedcurve));
+pub const ParseSecp256k1Sha256Der = ParseKeyDer(EcdsaSecp256k1Sha256, CheckOid(oid_ecdsa_s256_namedcurve));
 
 /// check namedcurve OID
 pub fn CheckOid(comptime namedcurve_oid: []const u8) type {
@@ -452,6 +457,45 @@ test "SigningES384 with der pkcs8 key" {
     try testing.expectEqual(true, veri);
 }
 
+test "SigningES512 with der pkcs8 key" {
+    const alloc = testing.allocator;
+
+    const prikey = "MIH3AgEAMBAGByqGSM49AgEGBSuBBAAjBIHfMIHcAgEBBEIAyYKP3zmWUSvKgv9BYFSQ8SNvCUWQ+ac4o8xxVxQ0xJJYi5r86HoOcPafRhA08FpL5QsbH09t7SIb4/u3SRoaHamgBwYFK4EEACOhgYkDgYYABAHlKXMgRKArgvYmeANJpFSbOlD51GpU/jnQzhWoomjv4MT/Urz4tTzkMY1gWNIpMFNYKzczdT6QWcaCvYx80fN20ACwZYQpDhb4lAo3rKovPU5wBzwGfMDMX3WYaPCglREuk1mV13TLW5xsv0SbKOoHQuaGiQ8Vb2W0QQwS8iecuQQq8g==";
+    const pubkey = "MIGbMBAGByqGSM49AgEGBSuBBAAjA4GGAAQB5SlzIESgK4L2JngDSaRUmzpQ+dRqVP450M4VqKJo7+DE/1K8+LU85DGNYFjSKTBTWCs3M3U+kFnGgr2MfNHzdtAAsGWEKQ4W+JQKN6yqLz1OcAc8BnzAzF91mGjwoJURLpNZldd0y1ucbL9EmyjqB0LmhokPFW9ltEEMEvInnLkEKvI=";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
+
+    const secret_key = try ParseP521Sha512Der.parseSecretKeyDerAuto(prikey_bytes);
+    const public_key = try ParseP521Sha512Der.parsePublicKeyDer(pubkey_bytes);
+
+    const h = SigningES512.init(alloc);
+
+    const alg = h.alg();
+    const signLength = h.signLength();
+    try testing.expectEqual(132, signLength);
+    try testing.expectEqualStrings("ES512", alg);
+
+    const msg = "test-data";
+
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    const signed = try h.sign(random, msg, secret_key);
+
+    defer alloc.free(signed);
+
+    try testing.expectEqual(132, signed.len);
+
+    const veri = try h.verify(msg, signed, public_key);
+
+    try testing.expectEqual(true, veri);
+}
+
 test "SigningES256K with der pkcs8 key" {
     const alloc = testing.allocator;
 
@@ -496,7 +540,7 @@ test "SigningES256" {
     try testing.expectEqual(64, signLength);
     try testing.expectEqualStrings("ES256", alg);
 
-    const kp = ecdsa.EcdsaP256Sha256.KeyPair.generate(io);
+    const kp = EcdsaP256Sha256.KeyPair.generate(io);
 
     const msg = "test-data";
 
@@ -526,7 +570,7 @@ test "SigningES384" {
     try testing.expectEqual(96, signLength);
     try testing.expectEqualStrings("ES384", alg);
 
-    const kp = ecdsa.EcdsaP384Sha384.KeyPair.generate(io);
+    const kp = EcdsaP384Sha384.KeyPair.generate(io);
 
     const msg = "test-data";
 
@@ -545,6 +589,36 @@ test "SigningES384" {
     try testing.expectEqual(true, veri);
 }
 
+test "SigningES512" {
+    const io = testing.io;
+    const alloc = testing.allocator;
+
+    const h = SigningES512.init(alloc);
+
+    const alg = h.alg();
+    const signLength = h.signLength();
+    try testing.expectEqual(132, signLength);
+    try testing.expectEqualStrings("ES512", alg);
+
+    const kp = EcdsaP521Sha512.KeyPair.generate(io);
+
+    const msg = "test-data";
+
+    const random = (Random.IoSource{
+        .io = testing.io,
+    }).interface();
+
+    const signed = try h.sign(random, msg, kp.secret_key);
+
+    defer alloc.free(signed);
+
+    try testing.expectEqual(132, signed.len);
+
+    const veri = try h.verify(msg, signed, kp.public_key);
+
+    try testing.expectEqual(true, veri);
+}
+
 test "SigningES256K" {
     const io = testing.io;
     const alloc = testing.allocator;
@@ -556,7 +630,7 @@ test "SigningES256K" {
     try testing.expectEqual(64, signLength);
     try testing.expectEqualStrings("ES256K", alg);
 
-    const kp = ecdsa.EcdsaSecp256k1Sha256.KeyPair.generate(io);
+    const kp = EcdsaSecp256k1Sha256.KeyPair.generate(io);
 
     const msg = "test-data";
 

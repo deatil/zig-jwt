@@ -160,6 +160,7 @@ The JWT library have signing methods:
 
  - `ES256`: jwt.SigningMethodES256
  - `ES384`: jwt.SigningMethodES384
+ - `ES512`: jwt.SigningMethodES512
  - `ES256K`: jwt.SigningMethodES256K
  
  - `EdDSA`: jwt.SigningMethodEdDSA
@@ -232,6 +233,16 @@ const p384_public_key = try ecdsa.EcdsaP384Sha384.PublicKey.fromSec1(pub_key_byt
 const p384_secret_key = try jwt.ecdsa.ParseP384Sha384Der.parseSecretKeyDer(pri_key_bytes);
 const p384_secret_key = try jwt.ecdsa.ParseP384Sha384Der.parseSecretKeyPKCS8Der(pri_key_bytes);
 const p384_public_key = try jwt.ecdsa.ParseP384Sha384Der.parsePublicKeyDer(pub_key_bytes);
+
+// generate p521 public key
+const p521_kp = jwt.ecdsa.EcdsaP521Sha512.KeyPair.generate(io);
+// from plain bytes
+const p521_secret_key = try jwt.ecdsa.EcdsaP521Sha512.SecretKey.fromBytes(pri_key_bytes);
+const p521_public_key = try jwt.ecdsa.EcdsaP521Sha512.PublicKey.fromSec1(pub_key_bytes);
+// from der bytes
+const p521_secret_key = try jwt.ecdsa.ParseP521Sha512Der.parseSecretKeyDer(pri_key_bytes);
+const p521_secret_key = try jwt.ecdsa.ParseP521Sha512Der.parseSecretKeyPKCS8Der(pri_key_bytes);
+const p521_public_key = try jwt.ecdsa.ParseP521Sha512Der.parsePublicKeyDer(pub_key_bytes);
 
 // generate p256k public key
 const p256k_kp = ecdsa.EcdsaSecp256k1Sha256.KeyPair.generate(io);
