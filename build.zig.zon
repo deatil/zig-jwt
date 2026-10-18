@@ -16,5 +16,6 @@
         "LICENSE",
         "README.md",
         "src",
+        "pkg",
     },
 }
