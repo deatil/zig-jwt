@@ -6,8 +6,8 @@
     .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .@"zig-rsa" = .{
-            .url = "git+https://github.com/deatil/zig-rsa?ref=main#a9bc871c3c0b04a7a6a651ec020c7708da2f6990",
-            .hash = "zig_rsa-0.1.14-JhR-HEt3BABmgEBOCMueJORptBSQxmrJVtd4bMG5RBG7",
+            .url = "git+https://github.com/deatil/zig-rsa?ref=main#3abdf35c62030f9eece685d16ece98ab9a4aa277",
+            .hash = "zig_rsa-0.1.16-JhR-HBKFBADtZ3HuH_V-Tr0vs2TydgRjYvVrYwVQzFLp",
         },
     },
     .paths = .{
@@ -16,5 +16,6 @@
         "LICENSE",
         "README.md",
         "src",
+        "pkg",
     },
 }
