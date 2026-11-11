@@ -71,9 +71,6 @@ pub fn main(init: std.process.Init) !void {
 
     const kp = jwt.eddsa.Ed25519.KeyPair.generate(io);
 
-    var prng = std.Random.DefaultPrng.init(1234);
-    const random = prng.random();
-
     const claims = .{
         .aud = "example.com",
         .sub = "foo",
