@@ -14,6 +14,9 @@ pub fn build(b: *std.Build) void {
     });
     mod.addImport("zig-rsa", zig_rsa_dep.module("zig-rsa"));
 
+    const zpem_dep = b.dependency("zpem", .{});
+    mod.addImport("zpem", zpem_dep.module("zpem"));
+
     const ecdsa_mod = b.createModule(.{
         .root_source_file = b.path("pkg/ecdsa/ecdsa.zig"),
         .target = target,

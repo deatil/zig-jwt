@@ -6,6 +6,7 @@ const hash_sha2 = std.crypto.hash.sha2;
 const Random = std.Random;
 const Allocator = std.mem.Allocator;
 
+const zpem = @import("zpem");
 const rsa = @import("zig-rsa");
 const utils = @import("utils.zig");
 
@@ -58,6 +59,72 @@ pub fn SignRSA(comptime RSAType: type, comptime name: []const u8) type {
             return true;
         }
     };
+}
+
+pub fn parseSecretKeyPEM(alloc: Allocator, str: []const u8) !rsa.SecretKey {
+    var p = try zpem.decode(alloc, str);
+    defer p.deinit();
+
+    const bytes = try p.getBytes();
+    defer alloc.free(bytes);
+
+    const k = try rsa.SecretKey.fromDer(alloc, bytes);
+    return k;
+}
+
+pub fn parsePublicKeyPEM(alloc: Allocator, str: []const u8) !rsa.PublicKey {
+    var p = try zpem.decode(alloc, str);
+    defer p.deinit();
+
+    const bytes = try p.getBytes();
+    defer alloc.free(bytes);
+
+    const k = try rsa.PublicKey.fromDer(bytes);
+    return k;
+}
+
+pub fn parseSecretKeyPKCS8PEM(alloc: Allocator, str: []const u8) !rsa.SecretKey {
+    var p = try zpem.decode(alloc, str);
+    defer p.deinit();
+
+    const bytes = try p.getBytes();
+    defer alloc.free(bytes);
+
+    const k = try rsa.SecretKey.fromPKCS8Der(alloc, bytes);
+    return k;
+}
+
+pub fn parsePublicKeyPKCS8PEM(alloc: Allocator, str: []const u8) !rsa.PublicKey {
+    var p = try zpem.decode(alloc, str);
+    defer p.deinit();
+
+    const bytes = try p.getBytes();
+    defer alloc.free(bytes);
+
+    const k = try rsa.PublicKey.fromPKCS8Der(bytes);
+    return k;
+}
+
+pub fn parseSecretKeyPEMAuto(alloc: Allocator, str: []const u8) !rsa.SecretKey {
+    var p = try zpem.decode(alloc, str);
+    defer p.deinit();
+
+    const bytes = try p.getBytes();
+    defer alloc.free(bytes);
+
+    const k = try rsa.SecretKey.fromDerAuto(alloc, bytes);
+    return k;
+}
+
+pub fn parsePublicKeyPEMAuto(alloc: Allocator, str: []const u8) !rsa.PublicKey {
+    var p = try zpem.decode(alloc, str);
+    defer p.deinit();
+
+    const bytes = try p.getBytes();
+    defer alloc.free(bytes);
+
+    const k = try rsa.PublicKey.fromDerAuto(bytes);
+    return k;
 }
 
 test "SigningRS256" {

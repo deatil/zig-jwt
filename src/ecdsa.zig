@@ -4,6 +4,7 @@ const ecdsa = std.crypto.sign.ecdsa;
 const Random = std.Random;
 const Allocator = std.mem.Allocator;
 
+const zpem = @import("zpem");
 const rsa = @import("zig-rsa");
 const utils = @import("utils.zig");
 
@@ -78,10 +79,10 @@ const oid_ecdsa_p384_namedcurve = "1.3.132.0.34";
 const oid_ecdsa_p521_namedcurve = "1.3.132.0.35";
 const oid_ecdsa_s256_namedcurve = "1.3.132.0.10";
 
-pub const ParseP256Sha256Der = ParseKeyDer(EcdsaP256Sha256, CheckOid(oid_ecdsa_p256_namedcurve));
-pub const ParseP384Sha384Der = ParseKeyDer(EcdsaP384Sha384, CheckOid(oid_ecdsa_p384_namedcurve));
-pub const ParseP521Sha512Der = ParseKeyDer(EcdsaP521Sha512, CheckOid(oid_ecdsa_p521_namedcurve));
-pub const ParseSecp256k1Sha256Der = ParseKeyDer(EcdsaSecp256k1Sha256, CheckOid(oid_ecdsa_s256_namedcurve));
+pub const ParseP256Sha256Key = ParseKey(EcdsaP256Sha256, CheckOid(oid_ecdsa_p256_namedcurve));
+pub const ParseP384Sha384Key = ParseKey(EcdsaP384Sha384, CheckOid(oid_ecdsa_p384_namedcurve));
+pub const ParseP521Sha512Key = ParseKey(EcdsaP521Sha512, CheckOid(oid_ecdsa_p521_namedcurve));
+pub const ParseSecp256k1Sha256Key = ParseKey(EcdsaSecp256k1Sha256, CheckOid(oid_ecdsa_s256_namedcurve));
 
 /// check namedcurve OID
 pub fn CheckOid(comptime namedcurve_oid: []const u8) type {
@@ -96,9 +97,53 @@ pub fn CheckOid(comptime namedcurve_oid: []const u8) type {
 }
 
 // parse key der
-pub fn ParseKeyDer(comptime EC: type, comptime CheckOidFn: type) type {
+pub fn ParseKey(comptime EC: type, comptime CheckOidFn: type) type {
     return struct {
         const Self = @This();
+
+        pub fn parsePublicKeyPEM(alloc: Allocator, str: []const u8) !EC.PublicKey {
+            var p = try zpem.decode(alloc, str);
+            defer p.deinit();
+
+            const bytes = try p.getBytes();
+            defer alloc.free(bytes);
+
+            const k = try parsePublicKeyDer(bytes);
+            return k;
+        }
+
+        pub fn parseSecretKeyPEM(alloc: Allocator, str: []const u8) !EC.SecretKey {
+            var p = try zpem.decode(alloc, str);
+            defer p.deinit();
+
+            const bytes = try p.getBytes();
+            defer alloc.free(bytes);
+
+            const k = try parseSecretKeyDer(bytes);
+            return k;
+        }
+
+        pub fn parseSecretKeyPKCS8PEM(alloc: Allocator, str: []const u8) !EC.SecretKey {
+            var p = try zpem.decode(alloc, str);
+            defer p.deinit();
+
+            const bytes = try p.getBytes();
+            defer alloc.free(bytes);
+
+            const k = try parseSecretKeyPKCS8Der(bytes);
+            return k;
+        }
+
+        pub fn parseSecretKeyPEMAuto(alloc: Allocator, str: []const u8) !EC.SecretKey {
+            var p = try zpem.decode(alloc, str);
+            defer p.deinit();
+
+            const bytes = try p.getBytes();
+            defer alloc.free(bytes);
+
+            const k = try parseSecretKeyDerAuto(bytes);
+            return k;
+        }
 
         pub fn parsePublicKeyDer(bytes: []const u8) !EC.PublicKey {
             var parser = der.Parser{ .bytes = bytes };
@@ -224,8 +269,8 @@ test "SigningES256 with der key" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try ParseP256Sha256Der.parseSecretKeyDer(prikey_bytes);
-    const public_key = try ParseP256Sha256Der.parsePublicKeyDer(pubkey_bytes);
+    const secret_key = try ParseP256Sha256Key.parseSecretKeyDer(prikey_bytes);
+    const public_key = try ParseP256Sha256Key.parsePublicKeyDer(pubkey_bytes);
 
     const msg = "test-data";
 
@@ -257,8 +302,8 @@ test "SigningES256 with der pkcs8 key" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try ParseP256Sha256Der.parseSecretKeyPKCS8Der(prikey_bytes);
-    const public_key = try ParseP256Sha256Der.parsePublicKeyDer(pubkey_bytes);
+    const secret_key = try ParseP256Sha256Key.parseSecretKeyPKCS8Der(prikey_bytes);
+    const public_key = try ParseP256Sha256Key.parsePublicKeyDer(pubkey_bytes);
 
     const msg = "test-data";
 
@@ -290,8 +335,8 @@ test "SigningES256 with der pkcs8 key no namedcurve" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try ParseP256Sha256Der.parseSecretKeyPKCS8Der(prikey_bytes);
-    const public_key = try ParseP256Sha256Der.parsePublicKeyDer(pubkey_bytes);
+    const secret_key = try ParseP256Sha256Key.parseSecretKeyPKCS8Der(prikey_bytes);
+    const public_key = try ParseP256Sha256Key.parsePublicKeyDer(pubkey_bytes);
 
     const msg = "test-data";
 
@@ -325,8 +370,8 @@ test "SigningES256 with der key use parseSecretKeyDerAuto" {
         defer alloc.free(prikey_bytes);
         defer alloc.free(pubkey_bytes);
 
-        const secret_key = try ParseP256Sha256Der.parseSecretKeyDerAuto(prikey_bytes);
-        const public_key = try ParseP256Sha256Der.parsePublicKeyDer(pubkey_bytes);
+        const secret_key = try ParseP256Sha256Key.parseSecretKeyDerAuto(prikey_bytes);
+        const public_key = try ParseP256Sha256Key.parsePublicKeyDer(pubkey_bytes);
 
         const msg = "test-data";
 
@@ -357,8 +402,8 @@ test "SigningES256 with der key use parseSecretKeyDerAuto" {
         defer alloc.free(prikey_bytes);
         defer alloc.free(pubkey_bytes);
 
-        const secret_key = try ParseP256Sha256Der.parseSecretKeyDerAuto(prikey_bytes);
-        const public_key = try ParseP256Sha256Der.parsePublicKeyDer(pubkey_bytes);
+        const secret_key = try ParseP256Sha256Key.parseSecretKeyDerAuto(prikey_bytes);
+        const public_key = try ParseP256Sha256Key.parsePublicKeyDer(pubkey_bytes);
 
         const msg = "test-data";
 
@@ -391,8 +436,8 @@ test "SigningES384 with der key" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try ParseP384Sha384Der.parseSecretKeyDer(prikey_bytes);
-    const public_key = try ParseP384Sha384Der.parsePublicKeyDer(pubkey_bytes);
+    const secret_key = try ParseP384Sha384Key.parseSecretKeyDer(prikey_bytes);
+    const public_key = try ParseP384Sha384Key.parsePublicKeyDer(pubkey_bytes);
 
     const h = SigningES384.init(alloc);
 
@@ -430,8 +475,8 @@ test "SigningES384 with der pkcs8 key" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try ParseP384Sha384Der.parseSecretKeyPKCS8Der(prikey_bytes);
-    const public_key = try ParseP384Sha384Der.parsePublicKeyDer(pubkey_bytes);
+    const secret_key = try ParseP384Sha384Key.parseSecretKeyPKCS8Der(prikey_bytes);
+    const public_key = try ParseP384Sha384Key.parsePublicKeyDer(pubkey_bytes);
 
     const h = SigningES384.init(alloc);
 
@@ -469,8 +514,8 @@ test "SigningES512 with der pkcs8 key" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try ParseP521Sha512Der.parseSecretKeyDerAuto(prikey_bytes);
-    const public_key = try ParseP521Sha512Der.parsePublicKeyDer(pubkey_bytes);
+    const secret_key = try ParseP521Sha512Key.parseSecretKeyDerAuto(prikey_bytes);
+    const public_key = try ParseP521Sha512Key.parsePublicKeyDer(pubkey_bytes);
 
     const h = SigningES512.init(alloc);
 
@@ -508,8 +553,8 @@ test "SigningES256K with der pkcs8 key" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try ParseSecp256k1Sha256Der.parseSecretKeyPKCS8Der(prikey_bytes);
-    const public_key = try ParseSecp256k1Sha256Der.parsePublicKeyDer(pubkey_bytes);
+    const secret_key = try ParseSecp256k1Sha256Key.parseSecretKeyPKCS8Der(prikey_bytes);
+    const public_key = try ParseSecp256k1Sha256Key.parsePublicKeyDer(pubkey_bytes);
 
     const msg = "test-data";
 

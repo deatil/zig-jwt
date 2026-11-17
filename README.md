@@ -71,9 +71,6 @@ pub fn main(init: std.process.Init) !void {
 
     const kp = jwt.eddsa.Ed25519.KeyPair.generate(io);
 
-    var prng = std.Random.DefaultPrng.init(1234);
-    const random = prng.random();
-
     const claims = .{
         .aud = "example.com",
         .sub = "foo",
@@ -188,15 +185,13 @@ RSA PublicKey:
 var secret_key: jwt.crypto_rsa.SecretKey = undefined;
 var public_key: jwt.crypto_rsa.PublicKey = undefined;
 
-// rsa no generate
-
 // from pkcs1 der bytes
-const secret_key = try jwt.crypto_rsa.SecretKey.fromDer(alloc, prikey_bytes);
-const public_key = try jwt.crypto_rsa.PublicKey.fromDer(pubkey_bytes);
+const secret_key = try jwt.rsa.parseSecretKeyPEM(alloc, prikey_str);
+const public_key = try jwt.rsa.parsePublicKeyPEM(alloc, pubkey_str);
 
 // from pkcs8 der bytes
-const secret_key = try jwt.crypto_rsa.SecretKey.fromPKCS8Der(alloc, prikey_bytes);
-const public_key = try jwt.crypto_rsa.PublicKey.fromPKCS8Der(pubkey_bytes);
+const secret_key = try jwt.rsa.parseSecretKeyPKCS8PEM(alloc, prikey_str);
+const public_key = try jwt.rsa.parsePublicKeyPKCS8PEM(alloc, pubkey_str);
 
 defer secret_key.deinit(alloc);
 ~~~
@@ -220,9 +215,9 @@ const p256_kp = ecdsa.EcdsaP256Sha256.KeyPair.generate(io);
 const p256_secret_key = try ecdsa.EcdsaP256Sha256.SecretKey.fromBytes(pri_key_bytes);
 const p256_public_key = try ecdsa.EcdsaP256Sha256.PublicKey.fromSec1(pub_key_bytes);
 // from der bytes
-const p256_secret_key = try jwt.ecdsa.ParseP256Sha256Der.parseSecretKeyDer(pri_key_bytes);
-const p256_secret_key = try jwt.ecdsa.ParseP256Sha256Der.parseSecretKeyPKCS8Der(pri_key_bytes);
-const p256_public_key = try jwt.ecdsa.ParseP256Sha256Der.parsePublicKeyDer(pub_key_bytes);
+const p256_secret_key = try jwt.ecdsa.ParseP256Sha256Key.parseSecretKeyPEM(pri_key_bytes);
+const p256_secret_key = try jwt.ecdsa.ParseP256Sha256Key.parseSecretKeyPKCS8PEM(pri_key_bytes);
+const p256_public_key = try jwt.ecdsa.ParseP256Sha256Key.parsePublicKeyPEM(pub_key_bytes);
 
 // generate p384 public key
 const p384_kp = ecdsa.EcdsaP384Sha384.KeyPair.generate(io);
@@ -230,9 +225,9 @@ const p384_kp = ecdsa.EcdsaP384Sha384.KeyPair.generate(io);
 const p384_secret_key = try ecdsa.EcdsaP384Sha384.SecretKey.fromBytes(pri_key_bytes);
 const p384_public_key = try ecdsa.EcdsaP384Sha384.PublicKey.fromSec1(pub_key_bytes);
 // from der bytes
-const p384_secret_key = try jwt.ecdsa.ParseP384Sha384Der.parseSecretKeyDer(pri_key_bytes);
-const p384_secret_key = try jwt.ecdsa.ParseP384Sha384Der.parseSecretKeyPKCS8Der(pri_key_bytes);
-const p384_public_key = try jwt.ecdsa.ParseP384Sha384Der.parsePublicKeyDer(pub_key_bytes);
+const p384_secret_key = try jwt.ecdsa.ParseP384Sha384Key.parseSecretKeyPEM(pri_key_bytes);
+const p384_secret_key = try jwt.ecdsa.ParseP384Sha384Key.parseSecretKeyPKCS8PEM(pri_key_bytes);
+const p384_public_key = try jwt.ecdsa.ParseP384Sha384Key.parsePublicKeyPEM(pub_key_bytes);
 
 // generate p521 public key
 const p521_kp = jwt.ecdsa.EcdsaP521Sha512.KeyPair.generate(io);
@@ -240,9 +235,9 @@ const p521_kp = jwt.ecdsa.EcdsaP521Sha512.KeyPair.generate(io);
 const p521_secret_key = try jwt.ecdsa.EcdsaP521Sha512.SecretKey.fromBytes(pri_key_bytes);
 const p521_public_key = try jwt.ecdsa.EcdsaP521Sha512.PublicKey.fromSec1(pub_key_bytes);
 // from der bytes
-const p521_secret_key = try jwt.ecdsa.ParseP521Sha512Der.parseSecretKeyDer(pri_key_bytes);
-const p521_secret_key = try jwt.ecdsa.ParseP521Sha512Der.parseSecretKeyPKCS8Der(pri_key_bytes);
-const p521_public_key = try jwt.ecdsa.ParseP521Sha512Der.parsePublicKeyDer(pub_key_bytes);
+const p521_secret_key = try jwt.ecdsa.ParseP521Sha512Key.parseSecretKeyPEM(pri_key_bytes);
+const p521_secret_key = try jwt.ecdsa.ParseP521Sha512Key.parseSecretKeyPKCS8PEM(pri_key_bytes);
+const p521_public_key = try jwt.ecdsa.ParseP521Sha512Key.parsePublicKeyPEM(pub_key_bytes);
 
 // generate p256k public key
 const p256k_kp = ecdsa.EcdsaSecp256k1Sha256.KeyPair.generate(io);
@@ -250,9 +245,9 @@ const p256k_kp = ecdsa.EcdsaSecp256k1Sha256.KeyPair.generate(io);
 const p256k_secret_key = try ecdsa.EcdsaSecp256k1Sha256.SecretKey.fromBytes(pri_key_bytes);
 const p256k_public_key = try ecdsa.EcdsaSecp256k1Sha256.PublicKey.fromSec1(pub_key_bytes);
 // from der bytes
-const p256k_secret_key = try jwt.ecdsa.ParseSecp256k1Sha256Der.parseSecretKeyDer(pri_key_bytes);
-const p256k_secret_key = try jwt.ecdsa.ParseSecp256k1Sha256Der.parseSecretKeyPKCS8Der(pri_key_bytes);
-const p256k_public_key = try jwt.ecdsa.ParseSecp256k1Sha256Der.parsePublicKeyDer(pub_key_bytes);
+const p256k_secret_key = try jwt.ecdsa.ParseSecp256k1Sha256Key.parseSecretKeyPEM(pri_key_bytes);
+const p256k_secret_key = try jwt.ecdsa.ParseSecp256k1Sha256Key.parseSecretKeyPKCS8PEM(pri_key_bytes);
+const p256k_public_key = try jwt.ecdsa.ParseSecp256k1Sha256Key.parsePublicKeyPEM(pub_key_bytes);
 ~~~
 
 EdDSA PublicKey:
@@ -269,8 +264,8 @@ const kp = Ed25519.KeyPair.generate(io);
 const secret_key = try Ed25519.SecretKey.fromBytes(pri_key_bytes);
 const public_key = try Ed25519.PublicKey.fromBytes(pub_key_bytes);
 // from der bytes
-const secret_key = try jwt.eddsa.parseSecretKeyDer(pri_key_bytes);
-const public_key = try jwt.eddsa.parsePublicKeyDer(pub_key_bytes);
+const secret_key = try jwt.eddsa.parseSecretKeyPEM(pri_key_bytes);
+const public_key = try jwt.eddsa.parsePublicKeyPEM(pub_key_bytes);
 ~~~
 
 MLDSA PublicKey:
@@ -292,8 +287,8 @@ const mldsa44_kp = mldsa.MLDSA44.KeyPair.generate(io);
 const mldsa44_secret_key = try mldsa.MLDSA44.SecretKey.fromBytes(pri_key_bytes);
 const mldsa44_public_key = try mldsa.MLDSA44.PublicKey.fromBytes(pub_key_bytes);
 // from der bytes
-const mldsa44_secret_key = try jwt.mldsa.ParseMLDSA44Der.parseSecretKeyDer(pri_key_bytes);
-const mldsa44_public_key = try jwt.mldsa.ParseMLDSA44Der.parsePublicKeyDer(pub_key_bytes);
+const mldsa44_secret_key = try jwt.mldsa.ParseMLDSA44Key.parseSecretKeyPEM(pri_key_bytes);
+const mldsa44_public_key = try jwt.mldsa.ParseMLDSA44Key.parsePublicKeyPEM(pub_key_bytes);
 
 // generate MLDSA65 public key
 const mldsa65_kp = mldsa.MLDSA65.KeyPair.generate(io);
@@ -301,8 +296,8 @@ const mldsa65_kp = mldsa.MLDSA65.KeyPair.generate(io);
 const mldsa65_secret_key = try mldsa.MLDSA65.SecretKey.fromBytes(pri_key_bytes);
 const mldsa65_public_key = try mldsa.MLDSA65.PublicKey.fromBytes(pub_key_bytes);
 // from der bytes
-const mldsa65_secret_key = try jwt.mldsa.ParseMLDSA65Der.parseSecretKeyDer(pri_key_bytes);
-const mldsa65_public_key = try jwt.mldsa.ParseMLDSA65Der.parsePublicKeyDer(pub_key_bytes);
+const mldsa65_secret_key = try jwt.mldsa.ParseMLDSA65Key.parseSecretKeyPEM(pri_key_bytes);
+const mldsa65_public_key = try jwt.mldsa.ParseMLDSA65Key.parsePublicKeyPEM(pub_key_bytes);
 
 // generate MLDSA87 public key
 const mldsa87_kp = mldsa.MLDSA87.KeyPair.generate(io);
@@ -310,8 +305,8 @@ const mldsa87_kp = mldsa.MLDSA87.KeyPair.generate(io);
 const mldsa87_secret_key = try mldsa.MLDSA87.SecretKey.fromBytes(pri_key_bytes);
 const mldsa87_public_key = try mldsa.MLDSA87.PublicKey.fromBytes(pub_key_bytes);
 // from der bytes
-const mldsa87_secret_key = try jwt.mldsa.ParseMLDSA87Der.parseSecretKeyDer(pri_key_bytes);
-const mldsa87_public_key = try jwt.mldsa.ParseMLDSA87Der.parsePublicKeyDer(pub_key_bytes);
+const mldsa87_secret_key = try jwt.mldsa.ParseMLDSA87Key.parseSecretKeyPEM(pri_key_bytes);
+const mldsa87_public_key = try jwt.mldsa.ParseMLDSA87Key.parsePublicKeyPEM(pub_key_bytes);
 ~~~
 
 

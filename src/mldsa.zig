@@ -3,6 +3,7 @@ const testing = std.testing;
 const Random = std.Random;
 const Allocator = std.mem.Allocator;
 
+const zpem = @import("zpem");
 const rsa = @import("zig-rsa");
 const utils = @import("utils.zig");
 
@@ -72,9 +73,9 @@ const oid_mldsa44_publickey = "2.16.840.1.101.3.4.3.17";
 const oid_mldsa65_publickey = "2.16.840.1.101.3.4.3.18";
 const oid_mldsa87_publickey = "2.16.840.1.101.3.4.3.19";
 
-pub const ParseMLDSA44Der = ParseKeyDer(mldsa.MLDSA44, CheckOid(oid_mldsa44_publickey));
-pub const ParseMLDSA65Der = ParseKeyDer(mldsa.MLDSA65, CheckOid(oid_mldsa65_publickey));
-pub const ParseMLDSA87Der = ParseKeyDer(mldsa.MLDSA87, CheckOid(oid_mldsa87_publickey));
+pub const ParseMLDSA44Key = ParseKey(mldsa.MLDSA44, CheckOid(oid_mldsa44_publickey));
+pub const ParseMLDSA65Key = ParseKey(mldsa.MLDSA65, CheckOid(oid_mldsa65_publickey));
+pub const ParseMLDSA87Key = ParseKey(mldsa.MLDSA87, CheckOid(oid_mldsa87_publickey));
 
 /// check publickey OID
 pub fn CheckOid(comptime publickey_oid: []const u8) type {
@@ -89,9 +90,31 @@ pub fn CheckOid(comptime publickey_oid: []const u8) type {
 }
 
 // parse key der
-pub fn ParseKeyDer(comptime MLDSA: type, comptime CheckOidFn: type) type {
+pub fn ParseKey(comptime MLDSA: type, comptime CheckOidFn: type) type {
     return struct {
         const Self = @This();
+
+        pub fn parseSecretKeyPEM(alloc: Allocator, str: []const u8) !MLDSA.SecretKey {
+            var p = try zpem.decode(alloc, str);
+            defer p.deinit();
+
+            const bytes = try p.getBytes();
+            defer alloc.free(bytes);
+
+            const k = try parseSecretKeyDer(bytes);
+            return k;
+        }
+
+        pub fn parsePublicKeyPEM(alloc: Allocator, str: []const u8) !MLDSA.PublicKey {
+            var p = try zpem.decode(alloc, str);
+            defer p.deinit();
+
+            const bytes = try p.getBytes();
+            defer alloc.free(bytes);
+
+            const k = try parsePublicKeyDer(bytes);
+            return k;
+        }
 
         pub fn parsePublicKeyDer(bytes: []const u8) !MLDSA.PublicKey {
             var parser = der.Parser{ .bytes = bytes };
@@ -271,8 +294,8 @@ test "SigningMLDSA65 with der key" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try ParseMLDSA65Der.parseSecretKeyDer(prikey_bytes);
-    const public_key = try ParseMLDSA65Der.parsePublicKeyDer(pubkey_bytes);
+    const secret_key = try ParseMLDSA65Key.parseSecretKeyDer(prikey_bytes);
+    const public_key = try ParseMLDSA65Key.parsePublicKeyDer(pubkey_bytes);
 
     const h = SigningMLDSA65.init(alloc);
 

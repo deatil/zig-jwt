@@ -3,6 +3,7 @@ const testing = std.testing;
 const Random = std.Random;
 const Allocator = std.mem.Allocator;
 
+const zpem = @import("zpem");
 const rsa = @import("zig-rsa");
 const utils = @import("utils.zig");
 
@@ -65,6 +66,28 @@ pub fn SignEdDSA(comptime name: []const u8) type {
 }
 
 const oid_eddsa_publickey = "1.3.101.112";
+
+pub fn parseSecretKeyPEM(alloc: Allocator, str: []const u8) !Ed25519.SecretKey {
+    var p = try zpem.decode(alloc, str);
+    defer p.deinit();
+
+    const bytes = try p.getBytes();
+    defer alloc.free(bytes);
+
+    const k = try parseSecretKeyDer(bytes);
+    return k;
+}
+
+pub fn parsePublicKeyPEM(alloc: Allocator, str: []const u8) !Ed25519.PublicKey {
+    var p = try zpem.decode(alloc, str);
+    defer p.deinit();
+
+    const bytes = try p.getBytes();
+    defer alloc.free(bytes);
+
+    const k = try parsePublicKeyDer(bytes);
+    return k;
+}
 
 pub fn parseSecretKeyDer(bytes: []const u8) !Ed25519.SecretKey {
     var parser = der.Parser{ .bytes = bytes };
