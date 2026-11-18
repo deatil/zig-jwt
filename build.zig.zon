@@ -1,7 +1,7 @@
 .{
     .name = .zig_jwt,
     .description = "A JWT (JSON Web Token) library for zig.",
-    .version = "1.7.8",
+    .version = "1.7.9",
     .fingerprint = 0x30a5aec248bd7ac3,
     .minimum_zig_version = "0.17.0",
     .dependencies = .{
@@ -10,8 +10,8 @@
             .hash = "zig_rsa-0.1.16-JhR-HBKFBADtZ3HuH_V-Tr0vs2TydgRjYvVrYwVQzFLp",
         },
         .zpem = .{
-            .url = "git+https://github.com/deatil/zpem?ref=main#469d74693dc063a8902e4c8ce3cf2b0e31131d4e",
-            .hash = "zpem-1.5.4-1iuIjPmHAABNYbdHEAKtxJoiF5PxmRj4bBuiS2ipIFN8",
+            .url = "git+https://github.com/deatil/zpem?ref=v1.5.5#c4530d04a180a272962fb61caaad653cf39e17aa",
+            .hash = "zpem-1.5.5-1iuIjOuHAACFs1pE11kbMmn9Cg8KF8Auh0rdb5W0N6wu",
         },
     },
     .paths = .{
